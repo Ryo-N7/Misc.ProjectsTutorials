@@ -1,0 +1,502 @@
+---
+title: "The <i>R</i>-amones. Statistical Autopsy of A Punk Band"
+author: "Salvino A. Salvaggio, PhD"
+date: "March 6th, 2017"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+## insert libraries here
+library(knitr)
+library(stringr)
+library(lubridate)
+library(ggrepel)
+library(wordcloud)
+library(gridExtra)
+library(tidyverse)
+library(tidytext)
+
+########################################
+options(scipen=999)
+
+opts_chunk$set(cache=TRUE, echo=FALSE, warning=FALSE, message=FALSE, 
+               results = 'asis'
+#               , fig.show = "animate"
+               )
+
+myColors <- scale_fill_brewer(palette="Spectral")
+myHue <- scale_fill_hue(c=40,l=80)
+LO <- hsv(0.1,0.4,1)
+titles.format <- theme(plot.title = element_text(face="bold", size=13, color='grey50'),
+                       plot.subtitle = element_text(color='grey50'),
+                       axis.title = element_text(size=9, color='grey50'), 
+                       axis.text = element_text(size=9, color='grey50'),
+                       plot.margin = unit(c(0.3,0.3,0.3,0.3), "cm"))
+```
+```{r load_data_and_more}
+df <- read.csv('df.csv', header=TRUE, stringsAsFactors = FALSE)
+df <- df %>%
+    mutate(album = factor(album, levels = unique(album))) %>%
+    mutate(key = factor(key)) %>%
+    mutate(side = factor(side)) %>%
+    mutate(length = ms(length)) %>%
+    mutate(lengthS = seconds(length))
+
+writersAll <- paste(df$writers, collapse=', ')
+writersAll <- str_replace_all(writersAll, ',,', ',')
+writersAll <- unlist(strsplit(writersAll, ', '))
+writersList <- sort(unique(writersAll))
+writersListLabel <- str_replace_all(writersList, ' ', '_')
+
+dfWriters <- df
+for(i in 1:length(writersList)){
+    dfWriters[,writersListLabel[i]] <- str_detect(dfWriters$writers, writersList[i])
+}
+
+buffer <- dfWriters[, 16:77]
+writers <-  data.frame(writer=writersList,
+                       nSongs=apply(buffer, 2, sum), 
+                       row.names = NULL,
+                       stringsAsFactors = F) 
+writers <- writers %>%
+    arrange(desc(nSongs))
+rm(i, buffer, writersAll, writersList, writersListLabel)
+```
+
+&nbsp;
+
+**The starting point of this post is a simple question**: can we use *R* to analyze punk bands ? And, as a result: what can we learn from applying *data analytics methods* to punk music ?
+
+Whether we like it or not "[punk rock is arguably the most important subgenre of music to come out of the ‘70s](http://loudwire.com/15-greatest-punk-bands-of-all-time/)" and consequently still an integral part of our mainstream contemporary culture. After years of being declared [too outrageous to be accepted](https://www.nyu.edu/pubs/counterblast/punk.htm), its legacy is so astonishingly [extensive](http://www.academia.edu/7012948/Punk_Rock_So_What_The_Cultural_Legacy_of_Punk) that it deserves careful consideration and serious attention. Since decades, many music critiques, fine arts experts, social and political scientists or historians of pop culture have devoted time and energy to study the punk scene, its cultural production and legacy, the attitude of the punk generation, its tangle of ideologies, the ways it was perceived and received. Facts and figures, however, are still missing, perhaps because there apparently is nothing more distant from *data analytics* than punk music. So, is *data analytics* of punk rock possible ? Would it make any sense ? My answer is a loud and bold **yes** --yes, statistics on punk rock matters.
+
+&nbsp;
+
+Although the [punk scene](http://rateyourmusic.com/list/BrainToad/top_100_punk_bands_as_voted_by_musicianforums_com_punk_forum_users/) cannot be condensed into a single band, the *Ramones* are still considered by many as the first "pure punk band" and, perhaps --and more importantly--, [one of the most influential](http://ppcorn.com/us/2015/12/16/the-top-ten-most-influential-punk-bands-ever/). This does not imply that other punk rock bands (Clash, Dead Kennedys, The Stooges, Misfits, Sex Pistols, Social Distorsion, Patti Smith Group, etc) are less noteworthy or not as good. Yet, since I need to start somewhere, I decided that my first attempt would focus on the [Ramones](https://en.wikipedia.org/wiki/Ramones) --which I paradoxically like a lot despite being more of a baroque and classical music person.
+
+&nbsp;
+
+### What did the Ramones do ?
+
+From `r min(df$year)` to `r max(df$year)`, the Ramones released [`r length(unique(df$album))` studio albums](https://en.wikipedia.org/wiki/Ramones_discography). In their original USA release, the albums comprised `r nrow(df)` different songs in total that were quite short (median: `r as.character(seconds_to_period(median(df$lengthS)))`) and mostly written in a *Major* key (only 2 songs are in a *minor* key: Em).
+
+```{r count_albums}
+albums <- df %>% 
+    group_by(year, album) %>% 
+    summarise(nbreSongs=n(), duration=seconds_to_period(sum(lengthS)))
+kable(albums, format='markdown', row.names = F,
+      col.names = c('Year', 'Album', 'Nbre of Songs', 'Length'))
+```
+
+&nbsp;
+
+```{r 01_songsLength, , fig.height=5, fig.width=8, fig.align='center'}
+df %>% 
+    ggplot(., aes(x=as.numeric(lengthS))) +
+    geom_histogram(binwidth=10,
+                   color='white',
+                   fill='#FCCB85') +
+    xlab('Seconds') +
+    ylab('Nbre of Songs') +
+    labs(title='Distribution of Songs by Length') +
+    titles.format
+```
+
+```{r 02_songsKeys, , fig.height=5, fig.width=8, fig.align='center'}
+df %>% filter(!is.na(key)) %>%
+    group_by(key) %>% 
+    summarise(n=n()) %>% 
+    arrange(n) %>%
+    mutate(key = reorder(key, -n)) %>%
+    ggplot(., aes(x=key, y=n)) +
+    geom_bar(stat = "identity", 
+                color='white',
+                fill='#FCCB85') +
+    xlab('Keys') +
+        ylab('Number of Songs') +
+        labs(title='Songs per Key', subtitle='18 songs are NAs') +
+        titles.format
+```
+
+Musical purists always reproached the Ramones for knowing a couple of chords only and making an excessive use of them. Data show that the band knew at least... 11 different chords (out of too-many-to-bother-counting possibilities) although 80% of their songs were built on no more than 6. And there is no evidence of a sophistication of the Ramones' compositions over time.
+
+```{r 03_nbre_chords, , fig.height=5, fig.width=8, fig.align='center'}
+label <- seq(3,11)
+buffer <- df %>% 
+    filter(!is.na(chords)) %>%
+    group_by(chords) %>%
+    summarise(n=n()) %>% 
+    mutate(cn=cumsum(n)) %>%
+    mutate(percTot=cn*100/max(cn))
+
+NAs <- df %>% filter(is.na(chords)) %>% summarise(n()) %>% as.numeric()
+subtitl <- paste(NAs, ' songs are NA', sep='')
+titl <- paste('Songs in the Dataset: ', round(buffer$percTot[4],1), '% of All Songs Count', buffer$chords[4], 'Different Chords Max.')
+    
+ggplot(buffer, aes(x=chords, y=cn)) +
+    geom_step(color='#FCCB85', size=1) +
+    geom_hline(aes(yintercept=buffer$cn[4] + 1), colour="#990000", linetype="dashed") +
+    ylim(0, 175) +
+    coord_cartesian(xlim=c(3, 11)) + 
+    scale_x_continuous(breaks=seq(3, 11, 1)) +
+    xlab('Nbre of Chords') +
+    ylab('Nbre of Songs (cumulative)') +
+    labs(title=titl, subtitle=subtitl) +
+    titles.format
+```
+
+&nbsp;
+
+```{r 04_chords_over_time, , fig.height=5, fig.width=8, fig.align='center'}
+ggplot(df, aes(x=year, y=chords)) + 
+    geom_jitter(width = 0.2, height = 0.2, alpha=0.9, color='#FCCB85') + 
+    geom_smooth(size=.3) +
+    ylim(2, 12) +
+    coord_cartesian(ylim=c(2, 12)) + 
+    scale_y_continuous(breaks=seq(2, 12, 1)) +
+    xlab('Year') +
+    ylab('Nbre of Chords per Song') +
+    labs(title='Number of Chords per Song Over Time', subtitle='12 songs are NAs') +
+    titles.format
+```
+
+Just as the number of different chords in a Ramones' song is independent from the song writer/s --t.test of *number of different chords ~ writers* don't allow to exclude alternative hypothesis--, even with each band member having a very distinct personality, according to the biographers.
+
+```{r 05_song_writers, , fig.height=5, fig.width=8, fig.align='center'}
+writers %>%
+    mutate(writer = as.factor(writer)) %>%
+    mutate(writer = reorder(writer, nSongs)) %>%
+    top_n(10) %>%
+    
+ggplot(., aes(x=writer, y=nSongs)) +
+    geom_bar(stat = 'identity',
+             color='white',
+             fill='#FCCB85') +
+    xlab('') +
+    ylab('Nbre of Songs') +
+    coord_flip() +
+    labs(title='Number Of Songs Written', subtitle='Songs can be written by more than 1 writer') +
+    titles.format
+```
+
+&nbsp;
+
+In terms of *official charts* ranking in the USA, the success of the Ramones fluctuated over their career. The first years of the band were definitely the most successful, from the creation of the band till the early 80's. Then, from 1985 onwards, it looks like that the sales didn't follow the strengthening of their reputation not only within but also outside the punk rock scene.
+
+```{r 06_charts_position, fig.height=5, fig.width=8, fig.align='center'}
+df %>% 
+    select(album, albumPeakPositionUS,year) %>%
+    group_by(album) %>%
+    filter(row_number(year) == 1) %>%
+ggplot(.,aes(year, albumPeakPositionUS)) + 
+    geom_point(color='#FCCB85') +
+    geom_text_repel(aes(label=album), hjust=-0.05, vjust=0, color='grey45') +
+    geom_smooth(size=0.3, se=FALSE) +
+    xlim(1975,1997) +
+    ylim(35, 190) +
+    xlab('Year') +
+    ylab('Position') +
+    labs(title='Peak US Chart Position Of Albums') +
+    titles.format
+```
+
+&nbsp;
+
+### What did the Ramones say ?
+
+```{r tidy_text}
+df <- df %>%
+    mutate(lyrics = str_replace_all(lyrics, '\'', ' ')) %>%
+    mutate(nbreLines = str_count(lyrics, '< br>') + 1) %>%
+    mutate(nbreWord = str_count(lyrics, ' ') + 1)
+
+lineToken <- df %>%
+    unnest_tokens(line, lyrics, token = stringr::str_split, pattern = ' < br>') %>% 
+    mutate(lineCount = row_number())
+
+wordToken <-  lineToken %>% 
+    unnest_tokens(word, line) %>% 
+    mutate(wordCount = row_number())
+
+countWord <- count(wordToken, word, sort=TRUE)
+countWord <- head(countWord, 100)
+empty <- data.frame(a=character(100),b=rep('|',100),c=character(100),
+                     stringsAsFactors = FALSE)
+data("stop_words")
+wordToken2 <- wordToken %>% 
+    anti_join(stop_words) %>%
+    arrange(wordCount)
+countWord2 <- count(wordToken2, word, sort=TRUE)
+countWord2 <- head(countWord2, 100)
+```
+
+Im my dataset, the Ramones' lyrics come from [azlyrics.com](http://www.azlyrics.com/r/ramones.html). I preferred this source over many other available sources since that website provides the lyrics without the verses repeats, which, in my opinion, would over-emphasise and, ultimately, biais the relevance of n-grams or topics. The dataset (a data frame) contains a *lyrics* variable, i.e. a character string of the track (without the verses repeats) including the *< br>* tags to mark the end of each line.
+
+An example of the *lyrics* variable is like the following:
+
+> *`r df$lyrics[1]`*
+
+Tidying the text up (adopting the data principles recommended by [Hadley Wickham](https://www.jstatsoft.org/article/view/v059i10)) is the necessary first step of the lyrics mining exercise. For that, I follow the *tidy text* approach developed by [Julia Silge & David Robinson](http://tidytextmining.com/index.html).
+
+&nbsp;
+
+```{r words_processing}
+medianWord <- median(df$nbreWord)
+uniqueWords <- wordToken2 %>% 
+    select(word) %>%
+    filter(!str_detect(word, '[0-9]')) %>%
+    group_by(word) %>% 
+    filter(row_number(word) == 1) %>%
+    arrange(word)
+nbreUniqWords <- nrow(uniqueWords)
+```
+First and foremost, it is worth noting that whatever the Ramones say, they say it in very few words ! Ramones songs are brief in time, but also short in lyrics (but not so much in vocabulary with `r format(nbreUniqWords, big.mark=",")` different unique words in total).
+
+```{r 07_songs_words, fig.height=5, fig.width=8, fig.align='center'}
+df %>% 
+    ggplot(., aes(x=nbreWord)) +
+    geom_histogram(binwidth=10,
+                   color='white',
+                   fill='#FCCB85') +
+    geom_vline(aes(xintercept=medianWord), colour="#990000", linetype="dashed") +
+    coord_cartesian(ylim=c(0, 15)) + 
+    scale_y_continuous(breaks=seq(0, 15, 1)) +
+    scale_x_continuous(breaks=seq(0, 400, 20)) +
+    theme(panel.grid.minor = element_blank()) +
+    xlab('Total Number of Words') +
+    ylab('Nbre of Songs') +
+    labs(title='Distribution of Songs by Number of Words', 
+         subtitle='Verses repeats not included - Dashed red line is median') +
+    titles.format
+```
+
+&nbsp;
+
+Whereas uniGrams are usually considered suitable for analysis after expurgation of *stop words*, in the Ramones lyrics the raw uniGrams show an interesting pattern. The 2 most frequent words in the 14 studio albums are **i** and **you**. One could provocatively argue that *[Tea for Two](https://www.youtube.com/watch?v=y0zc7x434Aw)*, a well-known 1925 song from Vincent Youmans and Irving Caesar, is a good representation of the Ramones musical universe that seems to be mainly centered on *you* and *i*, and *i* and *you* !
+
+In the uniGrams table below, the columns of the cleaned uniGrams highlight that the top word in the Ramones lyrics is *dont*, expressing an atmosphere of clear *negation*. But there is also a fascinating tension pointing to the future that shows through words such as *wanna*, *gonna* and *ll* (*will* or *shall*). *Rock* and *punk* amongst the top 20 words definitely remind you what type of music you are listening to but also what subculture the band belongs to. In an all-men band, words such as *baby*, *love*, *girl* witness the significance of man-woman relationships in the Ramones songs. Perhaps it took statistical analysis of lyrics to take the risk of forming the hypothesis of the Ramones as a romantic band...
+
+```{r unigrams}
+tab <- cbind(countWord, empty, countWord2)
+kable(tab[1:20,], format='markdown', row.names = F,
+      col.names = c('All uniGrams', 'Freq', ' ', '|', ' ', 'Cleaned uniGrams', 'Freq'))
+```
+```{r 08_wordCloud, fig.height=3, fig.width=9, fig.align='left'}
+layout(matrix(c(1,2),1,2, byrow = TRUE))
+wordcloud(countWord$word, countWord$n, random.order=FALSE, max.words = 100, 
+          colors=brewer.pal(8, "Dark2"), use.r.layout=TRUE)
+wordcloud(countWord2$word, countWord2$n, random.order=FALSE, max.words = 100,
+          colors=brewer.pal(8, "Dark2"), use.r.layout=TRUE)
+
+```
+
+&nbsp;
+
+The identification of **most frequent uniGrams per album** is a further step into a more granular analysis:
+
+
+```{r 09_songs_words_album, fig.height=10, fig.width=9, fig.align='center'}
+l <- length(levels(wordToken2$album))
+plotList <- list()
+for(i in 1:l){
+    part <- wordToken2[wordToken2$album == levels(wordToken2$album)[i],] %>%
+        group_by(album) %>%
+        count(word) %>%
+        top_n(10)
+    p <- ggplot(part[1:10,], aes(reorder(word,n), n)) +
+        geom_bar(stat = "identity", fill='#FCCB85', width=0.65) +
+#        scale_fill_discrete(drop=F) +
+        labs(y=NULL, x=NULL, title=paste('Album: ', levels(wordToken2$album)[i], sep='')) +
+        coord_flip() +
+        titles.format +
+        theme(plot.title = element_text(size=11))
+    plotList[[i]] <- p
+}
+do.call(grid.arrange, c(plotList, ncol=3))
+```
+
+&nbsp;
+
+In addition to identifying the most frequent single words, we could also highlight *when* they are used in the discography using a simple *Token Distribution Analysis*. Let's limit this exercise to 5 words only from the list of the top 20: *love*, *gonna*, *rock* (or *rocker*), *life* and *dont*.
+
+```{r 10_token_distribution_analysis_1, fig.height=1.75, fig.width=8, fig.align='center'}
+df$love <- as.numeric(str_detect(df$lyrics, 'love'))
+df$wanna <- as.numeric(str_detect(df$lyrics, 'wanna'))
+df$rock <- as.numeric(str_detect(df$lyrics, 'rock|rocker'))
+df$life <- as.numeric(str_detect(df$lyrics, 'life'))
+df$dont <- as.numeric(str_detect(df$lyrics, 'dont'))
+
+ggplot(df, aes(ID, love, fill=album)) +
+    geom_bar(stat='identity', width=0.4) +
+    coord_cartesian(ylim=c(0, 1)) + 
+    scale_y_continuous(breaks=c(0,1)) +
+    labs(title='Token Distribution', subtitle='Colored by album') +
+    xlab('') +
+    theme(legend.position="none",
+          axis.ticks.y = element_blank(), 
+          axis.text.y = element_blank()) +
+    titles.format
+```
+```{r 11_token_distribution_analysis_2, fig.height=1.3, fig.width=8, fig.align='center'}
+ggplot(df, aes(ID, wanna, fill=album)) +
+    geom_bar(stat='identity', width=0.4) +
+    coord_cartesian(ylim=c(0, 1)) + 
+    scale_y_continuous(breaks=c(0,1)) +
+    theme(legend.position="none") +
+    xlab('') +
+    theme(legend.position="none",
+          axis.ticks.y = element_blank(), 
+          axis.text.y = element_blank()) +
+    titles.format
+```
+```{r 12_token_distribution_analysis_3, fig.height=1.3, fig.width=8, fig.align='center'}
+ggplot(df, aes(ID, rock, fill=album)) +
+    geom_bar(stat='identity', width=0.4) +
+    coord_cartesian(ylim=c(0, 1)) + 
+    scale_y_continuous(breaks=c(0,1)) +
+    theme(legend.position="none") +
+    xlab('') +
+    theme(legend.position="none",
+          axis.ticks.y = element_blank(), 
+          axis.text.y = element_blank()) +
+    titles.format
+```
+```{r 13_token_distribution_analysis_4, fig.height=1.3, fig.width=8, fig.align='center'}
+ggplot(df, aes(ID, life, fill=album)) +
+    geom_bar(stat='identity', width=0.4) +
+    coord_cartesian(ylim=c(0, 1)) + 
+    scale_y_continuous(breaks=c(0,1)) +
+    xlab('') +
+    theme(legend.position="none",
+          axis.ticks.y = element_blank(), 
+          axis.text.y = element_blank()) +
+    titles.format
+```
+```{r 14_token_distribution_analysis_5, fig.height=1.3, fig.width=8, fig.align='center'}
+ggplot(df, aes(ID, dont, fill=album)) +
+    geom_bar(stat='identity', width=0.4) +
+    coord_cartesian(ylim=c(0, 1)) + 
+    scale_y_continuous(breaks=c(0,1)) +
+    xlab('Songs') +
+    theme(legend.position="none",
+          axis.ticks.y = element_blank(), 
+          axis.text.y = element_blank()) +
+    titles.format
+```
+
+&nbsp;
+
+A quick visualisation of 'raw' nGrams (*stop words* not removed) confirms the feeling of a narrative universe mainly focused on **i**, **you** and **negation** (*don't*).
+
+```{r 15_nGrams, fig.height=5, fig.width=9, fig.align='center'}
+nGram <- data_frame(text=paste(wordToken$word, collapse = ' '))
+nGramCleaned <- data_frame(text=paste(wordToken2$word, collapse = ' '))
+
+biGrams <-  nGram %>% 
+    unnest_tokens(ngram, text, token = "ngrams", n = 2) %>%
+    count(ngram, sort = TRUE)
+
+biGramsCleaned <-  nGramCleaned %>% 
+    unnest_tokens(ngram, text, token = "ngrams", n = 2) %>%
+    count(ngram, sort = TRUE)
+
+triGrams <-  nGram %>% 
+    unnest_tokens(ngram, text, token = "ngrams", n = 3) %>%
+    count(ngram, sort = TRUE)
+
+b.G <- biGrams %>%
+    mutate(ngram = reorder(ngram, n)) %>%
+    slice(1:20) %>%
+    ggplot(., aes(x=ngram, y=n)) + 
+    geom_bar(stat = "identity", 
+             color='white',
+             fill='#FCCB85') + 
+    xlab('bi-grams') +
+    #       ylab('Number of Press Clippings') +
+    coord_flip() +
+    labs(title='Most Frequent bi-Grams') +
+    titles.format
+
+t.G <- triGrams %>%
+    mutate(ngram = reorder(ngram, n)) %>%
+    slice(1:20) %>%
+    ggplot(., aes(x=ngram, y=n)) + 
+    geom_bar(stat = "identity", 
+             color='white',
+             fill='#FCCB85') + 
+    xlab('tri-grams') +
+    #       ylab('Number of Press Clippings') +
+    coord_flip() +
+    labs(title='Most Frequent tri-Grams') +
+    titles.format
+grid.arrange(b.G, t.G, ncol=2, widths=c(1,1.2))
+```
+
+&nbsp;
+
+### What did the Ramones feel ?
+
+As a (brief) final chapter of this post, I would like to run a very quick --and limited-- *sentiment analysis* of the Ramones' studio albums lyrics. Actually, rather than a *sentiment analysis*, this is nothing but scratching the surface of *sentiment analysis*. The *bing* sentiment lexicon was used here, but a similar analysis could be carried out using *afinn* or *nrc* lexicons (all available in the *tidytext* r package) or using all of them for a comparative approach.
+
+```{r sentiment_analysis}
+bing <- get_sentiments('bing')
+sentLyricsWord <- wordToken %>%
+    inner_join(bing)
+
+bing <- get_sentiments('bing')
+sentLyricsWord <- wordToken %>%
+    inner_join(bing)
+```
+```{r 16_sentiment_words_overall, fig.height=7, fig.width=9, fig.align='center'}
+mostSentWord <- sentLyricsWord %>%
+    group_by(sentiment) %>%
+    count(word, sort = TRUE) %>%
+    top_n(20) %>%
+    mutate(n = ifelse(sentiment == 'negative', -n, n)) %>%
+    mutate(word = reorder(word, n)) %>%
+    arrange(desc(n))
+
+ggplot(mostSentWord, aes(word, n, fill = n > 0)) +
+    geom_bar(stat = "identity", show.legend = FALSE) +
+    labs(title='Most Frequent Positive And Negative Sentiment Words',
+         subtitle='In the 14 studio albums overall',
+         y='Frequency',
+         x=NULL) +
+    coord_flip() +
+    titles.format
+```
+
+&nbsp;
+
+Although the *sentiment lexicon* gives the word *punk* a negative value, there is little risk in asserting that this is not the way the Ramones intended it.
+
+```{r 17_sentiment_album, fig.height=9, fig.width=9, fig.align='center'}
+sentLyricsWord2 <- sentLyricsWord %>%
+    mutate(sentiment = ifelse(sentiment == 'negative', -1, 1))
+
+sentLyricsWord2 %>%
+    group_by(ID, TrackNumber, title, album) %>%
+    summarise(nSent=sum(sentiment)) %>%
+ggplot(., aes(TrackNumber, nSent, fill = nSent > 0)) +
+    geom_bar(stat = "identity", show.legend = FALSE) +
+    facet_wrap(~album, ncol = 3) +
+    labs(y='Sentiment score',
+         x='Track number on album',
+         title='Sentiments Through the Studio Albums') +
+    titles.format
+```
+
+In order to fine tune the approach, a more accurate *sentiment analysis* should be undertaken paying attention to 4 *caveats* at least:
+
+* in the lyrics, identify the sentiment words preceded or followed by *not*;
+* review and, perhaps, amend the sentiment lexicon(s) to better reflect the *punk rock* subculture;
+* focus on relative more than absolute frequencies of words;
+* add terms' *inverse document frequency* analysis to measure the impact of the words that are rarely used.
+
+
+&nbsp;
+
+<hr size=2>
+
+The **dataset** and **complete R code** of this post can be downloaded from this [link](http://www.salvaggio.net/_sasR/downloadsR/TheRamones_2017.zip).
+
+<hr size=2>
