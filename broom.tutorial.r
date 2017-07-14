@@ -5,6 +5,7 @@ summary(fit)
 library(dplyr)
 library(broom)
 library(ggplot2)
+library(survival)
 
 tidy(fit)
 #          term  estimate   std.error  statistic      p.value

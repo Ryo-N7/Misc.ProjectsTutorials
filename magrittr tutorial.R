@@ -3,10 +3,10 @@ install.packages("magrittr")
 library(magrittr)
 
 car_data <- 
-  mtcars %>%
-  subset(hp > 100) %>%
-  aggregate(. ~ cyl, data = ., FUN = . %>% mean %>% round(2)) %>%
-  transform(kpl = mpg %>% multiply_by(0.4251)) %>%
+  mtcars %>%                 # take mtcars dataset
+  subset(hp > 100) %>%       # subset by hp > 100
+  aggregate(. ~ cyl, data = ., FUN = . %>% mean %>% round(2)) %>%  # aggregate based on # of cyl
+  transform(kpl = mpg %>% multiply_by(0.4251)) %>%     # add kpl variable
   print
 ?aggregate
 
@@ -19,7 +19,7 @@ car_data %>%
 
 
 iris$Sepal.Length %<>% sqrt
-irisisi %<>% as.data.frame(iris$Sepal.Length)
+iris %<>% as.data.frame(iris$Sepal.Length)
 
 
 library(dplyr)
@@ -30,11 +30,11 @@ str(flights)
 
 mutate(Date = ymd(paste(year, "-", month, "-01", sep = "")))
        
-       
+?ymd()
 
 
 
-flights$date <- strptime(flights$date, %d/ %m/%Y %H:%M)
+flights$date <- strptime(flights$date, "%d/%m/%Y %H:%M")
 
 hourly_delay <- filter( 
   summarise(
@@ -59,6 +59,8 @@ hourly_delay <- flights %>%
     delay = mean(dep_delay), 
     n = n() ) %>% 
   filter(n > 10)
+
+
 
 # Let's play with some strings
 
@@ -125,4 +127,100 @@ str(mydata)
 # Rather than
 (1 + 8) %>% sqrt
 # [1] 3
+
+
+
+
+# a tour of the tibble package:
+library(tibble)
+library(magrittr)
+
+tibble(x = 1:5, x_squared = x ^ 2)
+# sequential evaluation allows for additional columns to be created from
+# the manipulation of earlier defined ones!
+
+# tibble = data defined column-column
+# tribble = data defined row-row
+
+tribble(
+  ~ Film, ~ Year,
+  "A New Hope", 1977,
+  "The Empire Strikes Back", 1980,
+  "Return of the Jedi", 1983
+)
+# try in tibble instead...
+tibble(Film = c("Dank Hope", "Empire Strike Out", "Jedi Reversi"), Year = c(1977, 1980, 1983))
+
+# Recoding: create labels for plot then JOIN into dataset
+# Exclusion: ID observations for exclusion, remove with ANTI-JOIN
+library(dplyr)
+
+plot_labs <- tribble(
+  ~ Group, ~ GroupLabs,
+  "TD", "Typically Dev",
+  "CI", "Coch",
+  "ASD", "Autistic"
+)
+
+dataset <- tibble(Group = c("TD", "CI", "ASD"))
+
+dataset <- left_join(dataset, plot_labs, by = "Group")
+dataset
+
+# Reducto!
+ids_to_exclude <- tibble::tribble(
+  ~ Study, ~ ResearchID,
+  "TimePoint1", "053L",
+  "TimePoint1", "102L",
+  "TimePoint1", "116L"
+)
+
+reduced_dataset <- anti_join(dataset, ids_to_exclude)
+
+# Conversion to tibble
+as_tibble(mtcars)
+
+# Vectors into tibbles with enframe()
+quantiles <- quantile(mtcars$hp, probs = c(.1, .25, .5, .75, 0.9))
+quantiles
+
+quantibble <- enframe(quantiles, "quantile", "value")
+quantibble
+
+# dataframe vs. tibbles in VIEW/PRINT
+
+df <- as.data.frame(replicate(26, 1:200)) %>%   # 200 x 26 df
+  setNames(letters) %>% 
+  as_tibble()
+df
+
+glimpse(df)    # look at few values from EACH column
+
+# Add new rows add_row(), add new columns add_column()
+df <- tibble(comment = "original", x = 1:2, x_squared = x ^ 2)
+df
+df <- df %>% 
+            add_row(comment = "append", x = 3:4, x_squared = x ^ 2) %>% # default: adds to bottom
+            add_row(comment = "prepend", x = 0, x_squared = x ^ 2,
+                    .before = 1)   # .before to add new BEFORE = 'x'
+df
+
+df %>% 
+  add_row(x = 5, comment = "NA defaults") %>% 
+  add_row(x_squared = 36, x = 6, comment = "order doesn't matter")  # naming columns in add so order = irrelevant
+
+df %>% add_column(comment2 = "inserted column", 
+                  .after = "comment")  # add new AFTER "comment" column
+# either add_column or dplyr:::mutate! 
+
+as_tibble(mtcars)  # * represent row-names of data labels...
+mtcars %>% 
+  as_tibble() %>% 
+  rownames_to_column("model")
+
+
+
+
+
+
 

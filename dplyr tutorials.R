@@ -1,6 +1,7 @@
 # dplyr tutorial
 library(tidyverse)
 library(nycflights13)
+
 dim(flights)
 head(flights)
 filter(flights, month == 2, day == 20)
@@ -925,6 +926,110 @@ df.car_spec_data <- mutate(df.car_spec_data, car_weight_tons = horsepower_bhp / 
 #--------------------------
 
 df.car_spec_data <- mutate(df.car_spec_data, torque_per_ton = torque_lb_ft / car_weight_tons)
+
+
+
+# stcorp.nl dply tutorial:
+filter(mtcars, cyl == 8, qsec > 16)
+arrange(mtcars, cyl, mpg) # sort according to one or more columns passed
+
+select(mtcars, mpg, wt, new_cyl = cyl)
+select(mtcars, starts_with("c"))  # select columns starting with 'c'
+mtcars %>% select(ends_with("yl")) # select columns ending with 'yl'
+mtcars %>% select(contains('ar')) # select columns containing 'ar'
+mtcars %>% select(one_of('mpg', "cyl")) # select columns mpg or cyl
+
+mtcars %>% rename(new_mpg = mpg)
+mtcars %>% distinct(cyl)   # select unique rows based on columns passed
+
+dat <- mtcars %>% select(mpg, wt)       # add/edit columns + keep all not mentioned
+dat %>% mutate(new_col = mpg + wt, 
+               new_col2 = mpg * wt)
+
+mtcars %>% transmute(new_col = mpg + wt,
+                     new_col2 = mpg * wt)   # NOT keep other columns
+
+mtcars %>% summarise(mean_weight = mean(wt),
+                     max_mpg = max(mpg),
+                     min_cyl = min(cyl))     # summarize() NOT keep other columns
+
+mtcars %>% summarise_each(funs(mean, sd), mpg, wt)  # summarize +1 functions, over +1 columns
+
+mtcars %>% sample_n(10)   # sample 'n' rows from data.frame
+mtcars %>% sample_frac(0.05)  # sample fraction of rows from data.frame
+
+mtcars %>% glimpse()
+
+library(broom)
+result <- mtcars %>% do(tidy(lm(mpg ~ wt, data = .)))
+result
+
+# tidyr: gather() and spread()
+library(tidyr)
+dat = data.frame(temp = runif(3, 15, 25), 
+                 rain_station1 = runif(3, 1, 3), 
+                 rain_station2 = runif(3, 1, 3),
+                 rain_station3 = runif(3, 1, 3))
+# dplyr: each row = observation and each column = variable
+# NOT ALWAYS THE CASE.
+dat
+# One variable 'amount of rain' spread over 3 columns 'station 1' --- 'station 3'
+# Necessity wrap all rain values into ONE column, add in additional ID column for specify
+# which station rain value observed
+# Ex.
+# gather(data, key (variable to gather), value (name of new column), ...) 
+#   -'variable' to exclude column from gather()
+dat %>% gather(station_id, rainfall, -temp)
+
+# reverse operation using spread(): from long format to wide format.
+
+# Grouping and operating per group
+mtcars_grouped <-  mtcars %>% group_by(am)  # split mtcars per 'am'
+mtcars_grouped %>% summarise(mean_weight = mean(wt), 
+          max_milepergallon = max(mpg), 
+          min_cylinder = min(cyl))
+
+# Exercises:
+# select cars with wt > 3, mean of horsepower.
+names(mtcars)
+mtcars %>% filter(wt > 3) %>% mutate(mean_hp = mean(hp)) %>% arrange(cyl, mpg)
+mtcars %>% filter (wt > 3) %>% summarise(mean(hp))
+
+mtcars %>% group_by(gear) %>% summarise(carsG = distinct(gear))
+mtcars %>% rownames_to_column(var = "car") %>% group_by(gear) %>%  tally()
+mtcars %>% group_by(gear) %>% tally()
+
+library(reshape2)
+dat <- melt(EuStockMarkets)
+glimpse(dat)
+dat %>% select(Var2, value) %>% rename("market_id" = Var2, "closing_price" = value) %>% 
+  group_by(market_id) %>% summarise(mean_price = mean(closing_price)) %>% 
+  arrange(desc(mean_price))
+
+pct <- function(x) {x/lag(x)}
+
+dat %>% select(Var2, value) %>% rename("market_id" = Var2, "closing_price" = value) %>% 
+  group_by(market_id) %>% mutate_all(funs(pct))    # how to summarize by GROUP
+
+dat %>% select(Var2, value) %>% rename("market_id" = Var2, "closing_price" = value) %>% 
+  group_by(market_id)
+           
+dat %>% select(Var2, value) %>% rename("market_id" = Var2, "closing_price" = value) %>% 
+  group_by(market_id) %>% mutate_all(funs(pct)) %>% summarise(closing_price)
+
+dat %>% select(market_id = Var2, closing_price = value) %>% group_by(market_id) %>% 
+  mutate_all(funs(pct))
+
+
+set.seed(2)
+test_score <- data.frame(question_max_score = round(runif(10, 1, 3)),
+                         jane = runif(10, 0.2, 1.0), jason = runif(10, 0.5, 1.0),
+                         paul = runif(10, 0.1, 0.7), stacey = runif(10, 0.4, 0.9))
+
+test_score
+# question_max_score: max. score for question
+
+
 
 
 
