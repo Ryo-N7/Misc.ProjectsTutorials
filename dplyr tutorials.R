@@ -1030,7 +1030,48 @@ test_score
 # question_max_score: max. score for question
 
 
+## grouped summaries in dplyr
 
+library(dplyr)
+
+# LONGER:
+mtcars %>% 
+  group_by(cyl, gear) %>%
+  summarize(group_mean_mpg = mean(mpg), 
+            group_mean_disp = mean(disp)) %>% 
+  left_join(mtcars, ., by = c('cyl', 'gear')) %>%
+  select(cyl, gear, mpg, disp, group_mean_mpg, group_mean_disp) %>%
+  head()
+
+# SHORTER:
+
+mtcars %>% 
+  group_by(cyl, gear) %>% 
+  mutate(group_mu_mpg = mean(mpg), 
+         group_mu_disp = mean(disp)) %>% 
+  select(cyl, gear, mpg, disp, group_mu_mpg, group_mu_disp) %>% 
+  head()
+
+## add_group_summaries()
+add_group_summaries <- function(d, groupingVars, ...) {
+  # convert char vector into quosure vector
+  # These interfaces are still changing, so take care.
+  groupingQuos <- lapply(groupingVars, 
+                         function(si) { quo(!!as.name(si)) })
+  dg <- group_by(d, !!!groupingQuos)
+  ds <- summarize(dg, ...)
+  ds <- ungroup(ds)
+  left_join(d, ds, by= groupingVars)
+}
+
+
+
+mtcars %>% 
+  add_group_summaries(c("cyl", "gear"), 
+                      group_mean_mpg = mean(mpg), 
+                      group_mean_disp = mean(disp)) %>%
+  select(cyl, gear, mpg, disp, group_mean_mpg, group_mean_disp) %>%
+  head()
 
 
 
