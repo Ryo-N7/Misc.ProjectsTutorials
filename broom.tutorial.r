@@ -98,6 +98,9 @@ Orange %>% summarize(orange_cor = cor.test(age, circumference)$estimate,
 # OR for just the correlation coefficient:
 Orange %>% do(tidy(cor(.$age, .$circumference)))
 
+# for all output in cor.test():
+Orange %>% do(tidy(cor.test(.$age, .$circumference)))
+
 library(ggplot2)
 Orange %>% ggplot(aes(age, circumference, color = Tree)) +
                   geom_line()
@@ -115,7 +118,7 @@ Orange %>% group_by(Tree) %>% summarise(correlation = cor(age, circumference))
 
 # higher than aggregate (0.9135), similar across trees.
 
-cor.test(Orange$age, Orange$circumference)
+cor.test(Orange$age, Orange$circumference)  # for each different tree...
 # OR JUST DO THIS:
 Orange %>% group_by(Tree) %>% do(tidy(cor.test(.$age, .$circumference)))
 
@@ -176,6 +179,8 @@ regressions %>% glance(fit)
 # - allow for sorting by p-value, estimate, etc. to find most significant terms across all tests
 # - p-value histograms
 # - volcano plots comparing p-values to effect size estimates
+
+regressions %>% tidy(fit) %>% arrange(desc(p.value))
 
 
 

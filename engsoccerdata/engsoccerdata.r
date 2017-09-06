@@ -1,7 +1,5 @@
 require(engsoccerdata)
 require(ggplot2)
-require(dplyr)
-require(magrittr)
 library(tidyverse)
 
 engsoccerdata::
@@ -21,6 +19,10 @@ ESP <- spain %>%
   subset(tier == 1 & Season %in% 2000:2015)
 
 
+
+###
+
+###
 Barca <- spain %>% 
   subset(tier == 1 & Season %in% 1928:2015) %>% 
   homeaway() %>% 
@@ -133,67 +135,6 @@ Barca <- spain %>%
   mutate(win = gf > ga, lose = gf < ga, draw = gf == ga)
 
 
-
-maketable_eng(df = LIV, Season = 1996, tier = 1) %>% 
-  filter(team == "Liverpool") %>% 
-  select(-Pos)
-
-
-maketable_eng(df = england, Season = 1999, tier = 1)
-
-
-maketable_eng(df = EPL, Season = 2003, tier = 1)
-
-
-
-maketable_eng(df = LIV, Season = 1992, tier = 1) %>% 
-  maketable_eng(df = LIV, Season = 1993, tier = 1) %>% 
-  maketable_eng(df = LIV, Season = 1994, tier = 1) %>% 
-  group_by(Season)
-# SEASON =/ appear in maketable_eng
-
-
-maketable_ha(df = LIV, Season = 1992:2015, tier = 1, pts = 3)   # NOT build across seasons...
-
-table <- rbind(england, england_current()) %>% 
-  subset(tier ==1 & Season %in% 1992:2015) %>%
-  homeaway() %>% 
-  group_by(team, venue, Season) %>% 
-  summarise(totalpts = 3*sum(gf>ga) + sum(gf == ga)) %>% 
-  spread(venue, totalpts) %>% 
-  mutate(totalpts = away + home) %>% 
-  arrange(Season, desc(totalpts)) %>%           # NOICE
-  mutate(GF = gf, GA = ga) %>% 
-  # 
-  # mutate(GD = GF-GA) %>%
-  # group_by(team) %>%
-  # summarise(GP = sum(GD<=100),
-  #          W = sum(GD>0),
-  #          D = sum(GD==0),
-  #          L = sum(GD<0),                                # need to add in GF + GA  in above code somewhere....
-  #          gf = sum(GF),
-  #          ga = sum(GA),
-  #          gd = sum(GD)
-  # )
-  filter(team == "Liverpool") %>% 
-  arrange(desc(Season))
-
-# now just add in all the extra info..........
-
-table <- rbind(england, england_current()) %>% 
-  subset(tier ==1 & Season %in% 1992:2015) %>%
-  homeaway() %>% 
-  group_by(team, venue, Season) %>% 
-  #mutate(totalpts = 3*sum(gf>ga) + sum(gf == ga))  # how to summarize but keep used variables??  try aggregate() ?????   or... just mutate()... 
-
-?aggregate()
-
-england %>% homeaway() %>% 
-aggregate(gf, by = list(team), FUN = "sum")
-
-
-
-
 # Custom function by J.G.:
 maketable_ha <- function(df=NULL, Season=NULL, tier=NULL, pts=3, type = c("both", "home", "away")) {
   
@@ -245,9 +186,7 @@ maketable_ha <- function(df=NULL, Season=NULL, tier=NULL, pts=3, type = c("both"
   
 }
 
-??paste0
-
-
+#########
 dd <- lapply(unique(EPL$Season), function(x) {
   
   #league tables for home fixtures
@@ -272,13 +211,21 @@ dd <- lapply(unique(EPL$Season), function(x) {
   #order by ascending home points ratio
   arrange(HPR)
 
+dd %>% group_by(Season) %>% arrange(Pos)
+
+??rbind.fill()
+
+
+
+##
 
 #prettify the season variable (e.g. 2016 -> 2016/17)
 dd$season <- as.factor(paste0(dd$Season, "-", substr(dd$Season+1, 3, 4)))
 
-dd %>% select(season, team, GP ,Hpts, Apts, HPR) %>% head
-dd %>% select(season, team, GP ,Hpts, Apts, HPR) %>% tail
+dd %>% select(Season, team, GP ,Hpts, Apts, HPR) %>% head
+dd %>% select(Season, team, GP ,Hpts, Apts, HPR) %>% tail
 
+dd %>% filter(team == "Liverpool") %>% arrange(desc(Season))
 
 maketable_eng(df = england, Season = 2015, tier = 1)
 

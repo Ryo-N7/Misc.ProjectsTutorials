@@ -7,6 +7,8 @@ library(ggplot2)
 args(compare_means)
 args(stat_compare_means)   # for adding p-values to ggplots
 
+View(ToothGrowth)
+
 ToothGrowth %>% compare_means(len ~ supp, data = .)  # default: wilcoxon test
 ToothGrowth %>% compare_means(len ~ supp, method = "t.test", data = .)
 

@@ -2,7 +2,9 @@
 title: "The <i>R</i>-amones. Statistical Autopsy of A Punk Band"
 author: "Salvino A. Salvaggio, PhD"
 date: "March 6th, 2017"
-output: html_document
+output: 
+  html_document: 
+    keep_md: yes
 ---
 
 ```{r global_options, include=FALSE}

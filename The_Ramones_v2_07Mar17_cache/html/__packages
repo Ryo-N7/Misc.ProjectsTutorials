@@ -1,0 +1,17 @@
+base
+knitr
+stringr
+lubridate
+ggplot2
+ggrepel
+RColorBrewer
+wordcloud
+gridExtra
+tidyverse
+tibble
+tidyr
+readr
+purrr
+dplyr
+tidytext
+bindrcpp
