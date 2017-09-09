@@ -24,7 +24,8 @@ str(countries)
 DataData <- e0M %>% filter(country %in% countries) %>% 
   select(-last.observed) %>% 
   gather(period, value, 3:15) 
-
+names(e0M)
+e0M %>% select("last.observed")
 
 DataData %>% ggplot(aes(x = value, y = period %>% fct_rev())) + 
   geom_joy(aes(fill = period)) +   # dont forget aes()

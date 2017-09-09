@@ -6,6 +6,9 @@ library(stringr)
 library(forcats)
 library(rvest)
 library(xml2)
+library(scales)
+library(ggrepel)
+
 
 url <- "https://en.wikipedia.org/wiki/Global_Peace_Index"
 
@@ -24,7 +27,7 @@ colnames(GPI)
 
 as.numeric(GPI$`2017 rank`)   # several are tied nth place == "=10" or etc..... just manually replace as not many NAs
 
-namesGPI <- names(GPI)
+# namesGPI <- names(GPI)
 
 GPIrank <- select(GPI, country, ends_with("rank"))
 
@@ -36,17 +39,18 @@ levels(as.factor(GPIrank$year))  # need to take out "rank" for each.
 GPIrank <- GPIrank %>% mutate(year = as.factor(year))
 levels(GPIrank$year)
 
-GPIrank <- GPIrank %>% mutate(year = fct_recode(year,
-                                                           "2008" = "2008 rank", 
-                                                           "2009" = "2009 rank", 
-                                                           "2010" = "2010 rank",
-                                                           "2011" = "2011 rank",
-                                                           "2012" = "2012 rank",
-                                                           "2013" = "2013 rank",
-                                                           "2014" = "2014 rank",
-                                                           "2015" = "2015 rank",
-                                                           "2016" = "2016 rank",
-                                                           "2017" = "2017 rank"))
+GPIrank <- GPIrank %>% 
+  mutate(year = fct_recode(year,
+                                "2008" = "2008 rank", 
+                                "2009" = "2009 rank", 
+                                "2010" = "2010 rank",
+                                "2011" = "2011 rank",
+                                "2012" = "2012 rank",
+                                "2013" = "2013 rank",
+                                "2014" = "2014 rank",
+                                "2015" = "2015 rank",
+                                "2016" = "2016 rank",
+                                "2017" = "2017 rank"))
 
 levels(GPIrank$year)   # now as factor + no "rank" afterwards.
 
@@ -130,17 +134,17 @@ geo <- as.tibble(gapminder)
 GPI_Asia <- GPIrank %>% filter(country %in% c("Japan", "China", "Korea Republic", "DPR Korea", 
                                 "Philippines", "Taiwan")) %>% 
   mutate(region = "East Asia")
-library(scales)
-library(ggrepel)
 
-GPI_Asia %>% 
+# Instead of creating new subset data, reduce clutter in environment by piping before plotting!
+
+GPI_Asia %>%
   ggplot(aes(year, rank, group = country)) +
   geom_line() +
   geom_point() +
   geom_text_repel(data = GPI_Asia %>% filter(year == "2008"), aes(label = country, x = "2008"), color = "black", size = 4, nudge_x = -0.5) +
   geom_text(data = GPI_Asia %>% filter(year == "2017"), aes(label = country, x = "2017"), color = "black", size = 4, nudge_x = 0.5) +
-  scale_y_reverse(breaks = pretty_breaks(n = 20)) +
-  scale_x_discrete(expand = c(0.1, 0.1)) +
+  scale_y_reverse(breaks = c(1, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160)) +
+  scale_x_discrete(expand = c(0.1, 0.05)) +
   labs(x = "Year", y = "Rank") +
   ggtitle("Global Peace Index (East Asia Region)\n (2008-2017)") +
   theme.porttheme +

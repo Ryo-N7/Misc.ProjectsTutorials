@@ -127,8 +127,10 @@ maketable_eng(df = england, Season = 1999, tier = 1) %>%
 alltimerecord(england, "Liverpool")
 
 maketable_eng(df = england, Season = 1999, tier = 1)
+# all time record
 maketable_all(df=england[england$tier==1,],begin="1992-08-15",
               end="2017-07-01") 
+
 england %>% filter(tier == 1) %>% maketable_all(begin = "1992-08-15", end = "2016-5-25")
 
 
@@ -268,10 +270,12 @@ library(plyr)
 huh <- lapply(unique(EPL$Season), function(x) {
   maketable_eng(EPL, Season = x, tier = 1)
 }) 
+huh <- rbind.fill(huh)
+
 huh %>% mutate(Season = 1992:2015)
 
+??rep()
 
-huh <- rbind.fill(huh)
 z <- 1:22
 huh[1:22,] %>% mutate(season = 92)
 huh[23:44,] %>% mutate(season = 93)
