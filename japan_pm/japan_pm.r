@@ -68,13 +68,13 @@ japan_unemploy %>%
   geom_line(aes(date, unemployed/100)) +
   geom_vline(data = prime_ministers, 
              aes(xintercept = as.numeric(start)),
-             color = "red") +
+             color = "blue") +
   geom_text_repel(
     data = prime_ministers %>% filter(start > japan_unemploy$date[1]),
     aes(x = start, y = 0.015, label = name)
   ) +
   scale_y_continuous(labels = percent_format()) +
-  geom_hline(yintercept = mean(japan_unemploy$unemployed/100), color = "blue") +
+  geom_hline(yintercept = mean(japan_unemploy$unemployed/100), color = "red") +
   labs(x = "Year", y = "Unemployment Rate (%)") +
   theme_bw()
 
@@ -100,11 +100,14 @@ japan_unemploy %>%
     data = prime_ministers, 
     aes(xintercept = as.numeric(start)),
     color = "blue", alpha = 0.5) +
-  geom_vline(
-    xintercept = as.numeric(grid_year), color = "#636363") +
+  scale_x_date(
+    limits = as.Date(c("1960-01-01", "2020-01-01")),
+    date_labels = "%Y"
+  ) +
   geom_text_repel(
     data = prime_ministers %>% filter(start > japan_unemploy$date[1], pm_term > 730),
-    aes(x = start, y = 0.06, label = name), nudge_x = 10
+    aes(x = start, y = 0.06, label = name), 
+    force = 15, arrow = arrow(length = unit(0.01, 'npc'))
   ) +
   scale_y_continuous(
     labels = percent_format(), 
