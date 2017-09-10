@@ -209,4 +209,4 @@ japan_unemploy %>%
 
 ![](japan_pm_files/figure-html/plot-again-1.png)<!-- -->
 
-Much better!
+Much better! I wanted to fill in the spaces of the terms with the political parties, however, most of the Prime Ministers came from the Liberal Democratic Party or LDP (Jiminto in Japanese) which dominated Japanese politics from 1955 to 1993! Also with so many segments of PMs it wouldn't look as pretty as Hadley's graph.

@@ -1,3 +1,6 @@
+
+
+```r
 # Sakura data
 library(tidyverse)
 library(stringr)
@@ -15,7 +18,16 @@ sakura <- sakura %>% filter(AD %in% 812:2015)
 
 # look at column names
 colnames(sakura)
+```
 
+```
+## [1] "AD"                        "Full.flowering.date..DOY."
+## [3] "Full.flowering.date"       "Source.code"              
+## [5] "Data.type.code"            "Reference.Name"           
+## [7] "X"
+```
+
+```r
 # colnames don't look very neat and tidy...
 colnames(sakura) <- sakura %>% 
   colnames() %>% 
@@ -23,7 +35,16 @@ colnames(sakura) <- sakura %>%
   str_replace_all("\\.", "_")         # replace . with _
 
 colnames(sakura)
+```
 
+```
+## [1] "ad"                        "full_flowering_date__doy_"
+## [3] "full_flowering_date"       "source_code"              
+## [5] "data_type_code"            "reference_name"           
+## [7] "x"
+```
+
+```r
 # manually rename two of the columns...
 colnames(sakura)[1] <- "year"
 colnames(sakura)[2] <- "full_flowering_day_of_year"
@@ -38,7 +59,13 @@ date_sep <- as.character(sakura$full_flowering_date) %>%
 
 colnames(date_sep)[1] <- "date_fl"                        # properly name column
 colnames(date_sep)
+```
 
+```
+## [1] "date_fl"
+```
+
+```r
 date_sep <- date_sep %>% separate(date_fl, c("month", "day"), "\\.")    # separate into 'month' and 'day' columns on .
 
 sakura <- bind_cols(date_sep, sakura)   # combine date_sep into sakura
@@ -58,16 +85,43 @@ sakura$Month <- format(sakura$bloom, "%b")                     #  %b: abbreviate
 sakura$Day <- format(sakura$bloom, "%d")                       #  %d: decimal date
 
 glimpse(sakura)
+```
+
+```
+## Observations: 827
+## Variables: 8
+## $ month       <chr> "4", "4", "4", "4", "4", "4", "4", "4", "4", "4", ...
+## $ day         <chr> "01", "15", "06", "18", "14", "09", "16", "05", "1...
+## $ year        <int> 812, 815, 831, 851, 853, 864, 866, 869, 889, 891, ...
+## $ bloom       <date> 0812-04-01, 0815-04-15, 0831-04-06, 0851-04-18, 0...
+## $ Day_Of_Year <dbl> 92, 105, 96, 108, 104, 100, 106, 95, 104, 109, 108...
+## $ Year        <chr> "0812", "0815", "0831", "0851", "0853", "0864", "0...
+## $ Month       <chr> "Apr", "Apr", "Apr", "Apr", "Apr", "Apr", "Apr", "...
+## $ Day         <chr> "01", "15", "06", "18", "14", "09", "16", "05", "1...
+```
+
+```r
 # date format are all in <chr>
 # for plotting need to convert with as.numeric() for axes!
 sakura$Year %>% as.numeric() %>% glimpse()
+```
 
+```
+##  num [1:827] 812 815 831 851 853 864 866 869 889 891 ...
+```
+
+```r
 # Plotting ----------------------------------------------------------------
 
 ggplot(sakura, aes(x = as.numeric(Year), y = Day_Of_Year)) +
   geom_point() +
   geom_line() +
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%d-%b"))
+```
+
+<img src="sakura_bloom_files/figure-html/unnamed-chunk-1-1.png" width="672" />
+
+```r
 # does not look very clear...
 
 ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' variable...
@@ -75,6 +129,15 @@ ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' 
   geom_smooth(span = 0.2, size = 3) +
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%b-%d"),
                      limits = c(84, 125))
+```
+
+```
+## `geom_smooth()` using method = 'loess'
+```
+
+<img src="sakura_bloom_files/figure-html/unnamed-chunk-1-2.png" width="672" />
+
+```r
 # Could we make it more... sakura-y?
 
 ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' variable...
@@ -82,6 +145,15 @@ ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' 
   geom_smooth(span = 0.2, color = "#dd1c77", fill = "red", size = 3) +
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%b-%d"),
                      limits = c(84, 125))
+```
+
+```
+## `geom_smooth()` using method = 'loess'
+```
+
+<img src="sakura_bloom_files/figure-html/unnamed-chunk-1-3.png" width="672" />
+
+```r
 # Better! but does not look good on a drab grey background...
 
 #### With background image!
@@ -111,4 +183,17 @@ sakura_r <- function(df = sakura, xvar = 'as.numeric(Year)', yvar = 'Day_Of_Year
   return (g)
 }
 sakura_r()
+```
 
+```
+## `geom_smooth()` using method = 'loess'
+```
+
+<img src="sakura_bloom_files/figure-html/unnamed-chunk-1-4.png" width="672" />
+
+
+---
+title: "sakura_bloom.r"
+author: "Ryo Nakagawara"
+date: "Sun Sep 10 01:42:10 2017"
+---

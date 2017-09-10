@@ -85,12 +85,6 @@ japan_unemploy %>%
 prime_ministers <- prime_ministers %>% mutate(pm_term = (end - start))
 
 # vertical line for each 5th year in decade as scale_x_date() is being uncooperative...
-grid_year <- as.Date(c("1960-01-01",
-                       "1970-01-01", 
-                       "1980-01-01", 
-                       "1990-01-01", 
-                       "2000-01-01", 
-                       "2010-01-01"))
 
 japan_unemploy %>% 
   ggplot() +

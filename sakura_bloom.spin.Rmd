@@ -1,3 +1,5 @@
+
+```{r }
 # Sakura data
 library(tidyverse)
 library(stringr)
@@ -111,4 +113,11 @@ sakura_r <- function(df = sakura, xvar = 'as.numeric(Year)', yvar = 'Day_Of_Year
   return (g)
 }
 sakura_r()
+```
 
+
+---
+title: "sakura_bloom.r"
+author: "Ryo Nakagawara"
+date: "Sun Sep 10 01:42:10 2017"
+---
