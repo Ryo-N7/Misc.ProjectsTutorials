@@ -3,9 +3,77 @@
 ```r
 # Sakura data
 library(tidyverse)
+```
+
+```
+## Warning: package 'tidyverse' was built under R version 3.4.1
+```
+
+```
+## Loading tidyverse: ggplot2
+## Loading tidyverse: tibble
+## Loading tidyverse: tidyr
+## Loading tidyverse: readr
+## Loading tidyverse: purrr
+## Loading tidyverse: dplyr
+```
+
+```
+## Warning: package 'ggplot2' was built under R version 3.4.1
+```
+
+```
+## Warning: package 'tibble' was built under R version 3.4.1
+```
+
+```
+## Warning: package 'tidyr' was built under R version 3.4.1
+```
+
+```
+## Warning: package 'purrr' was built under R version 3.4.1
+```
+
+```
+## Warning: package 'dplyr' was built under R version 3.4.1
+```
+
+```
+## Conflicts with tidy packages ----------------------------------------------
+```
+
+```
+## filter(): dplyr, stats
+## lag():    dplyr, stats
+```
+
+```r
 library(stringr)
 library(scales)
+```
 
+```
+## Warning: package 'scales' was built under R version 3.4.1
+```
+
+```
+## 
+## Attaching package: 'scales'
+```
+
+```
+## The following object is masked from 'package:purrr':
+## 
+##     discard
+```
+
+```
+## The following object is masked from 'package:readr':
+## 
+##     col_factor
+```
+
+```r
 # Load data ---------------------------------------------------------------
 
 sakura <- read.csv("~/R_materials/Kyoto_Flowers.csv")
@@ -15,7 +83,13 @@ View(sakura)
 
 # First data point doesn't show until 812 AD... just skip ahead to that.
 sakura <- sakura %>% filter(AD %in% 812:2015)
+```
 
+```
+## Warning: package 'bindrcpp' was built under R version 3.4.1
+```
+
+```r
 # look at column names
 colnames(sakura)
 ```
@@ -72,6 +146,20 @@ sakura <- bind_cols(date_sep, sakura)   # combine date_sep into sakura
 sakura <- sakura %>% select(-full_flowering_date, -full_flowering_day_of_year, -x, -data_type_code, -reference_name, -source_code)  # remove extraneous columns
 
 library(lubridate)
+```
+
+```
+## 
+## Attaching package: 'lubridate'
+```
+
+```
+## The following object is masked from 'package:base':
+## 
+##     date
+```
+
+```r
 # ?make_date()
 # ?format()
 # use make_date function to create separate variable in full date format
@@ -160,8 +248,39 @@ ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' 
 library(jpeg)
 library(grid)
 library(gridExtra)
-library(cowplot)
+```
 
+```
+## 
+## Attaching package: 'gridExtra'
+```
+
+```
+## The following object is masked from 'package:dplyr':
+## 
+##     combine
+```
+
+```r
+library(cowplot)
+```
+
+```
+## Warning: package 'cowplot' was built under R version 3.4.1
+```
+
+```
+## 
+## Attaching package: 'cowplot'
+```
+
+```
+## The following object is masked from 'package:ggplot2':
+## 
+##     ggsave
+```
+
+```r
 sakura_r <- function(df = sakura, xvar = 'as.numeric(Year)', yvar = 'Day_Of_Year') {
   img_url <- 'https://i.imgur.com/CgwU1zb.jpg'
   tmp_file <- tempfile()
@@ -195,5 +314,5 @@ sakura_r()
 ---
 title: "sakura_bloom.r"
 author: "Ryo Nakagawara"
-date: "Sun Sep 10 01:42:10 2017"
+date: "Sun Sep 10 15:13:11 2017"
 ---
