@@ -2,14 +2,16 @@
 title: "sakura_bloom.r"
 author: "Ryo Nakagawara"
 date: "Sun Sep 10 15:13:11 2017"
-output: 
-  md_document:
-    variant: markdown_github
 ---
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 ```
+
+April in Japan is a time of new beginnings. Unlike most countries, the school year starts in April ...  asdfljasldf
+asdfasdfl
+asdfasdf...
+
+Let's get started by loading up our trusty packages and data:
 
 ```{r warning=FALSE, message=FALSE}
 # Sakura data
@@ -20,16 +22,23 @@ library(scales)
 # Load data ---------------------------------------------------------------
 
 sakura <- read.csv("~/R_materials/Kyoto_Flowers.csv")
-View(sakura)
+glimpse(sakura)
+```
 
+From looking at the raw data, it appears that data is missing from a number of rows until 812 AD. Along with many other rows throughout the years. We might as well cut those rows out and specify our own starting date in the plot later on.
+
+``` {r}
 # Tidy and Clean ----------------------------------------------------------
 
-# First data point doesn't show until 812 AD... just skip ahead to that.
-sakura <- sakura %>% filter(AD %in% 812:2015)
+# remove rows without flowering date
+sakura <- sakura %>% filter(!is.na(Full.flowering.date))
 
-# look at column names
-colnames(sakura)
+colnames(sakura)   # look at the column names
+```
 
+from looking at the column names... they don't look very neat or tidy.
+
+```{r}
 # colnames don't look very neat and tidy...
 colnames(sakura) <- sakura %>% 
   colnames() %>% 
@@ -37,27 +46,41 @@ colnames(sakura) <- sakura %>%
   str_replace_all("\\.", "_")         # replace . with _
 
 colnames(sakura)
+```
 
-# manually rename two of the columns...
+Much better! However there are two columns with names that need some manual fixing:
+
+``` {r}
 colnames(sakura)[1] <- "year"
 colnames(sakura)[2] <- "full_flowering_day_of_year"
 
-# remove rows without flowering date
-sakura <- sakura %>% filter(!is.na(full_flowering_date))
+colnames(sakura)
+```
 
+OK! Now let's separate the column containing our three-digit date data into individual `month` and `day` columns. We can use regular expressions (**regex**) to parse the character strings of the date (converted from the numeric format first) and then separate the `month` digits and `day` digits with a `.` period symbol. 
+
+```{r}
 # turn three digit number into month and day values.
+# split into two backreferences on the first digit, then place a .
 date_sep <- as.character(sakura$full_flowering_date) %>% 
-  str_replace_all("(.{1})(.*)", "\\1.\\2") %>%            # split into two backreferences on the first digit, then place a .
-  as.data.frame()
+  str_replace_all("(.{1})(.*)", "\\1.\\2") %>%            
 
 colnames(date_sep)[1] <- "date_fl"                        # properly name column
 colnames(date_sep)
 
 date_sep <- date_sep %>% separate(date_fl, c("month", "day"), "\\.")    # separate into 'month' and 'day' columns on .
+```
 
+
+
+```{r}
 sakura <- bind_cols(date_sep, sakura)   # combine date_sep into sakura
 sakura <- sakura %>% select(-full_flowering_date, -full_flowering_day_of_year, -x, -data_type_code, -reference_name, -source_code)  # remove extraneous columns
+```
 
+Using the `lubridate` package we can create a separate variable in YYYY/MM/DD format as well as format the individual date components into their own variables.
+
+```{r}
 library(lubridate)
 # ?make_date()
 # ?format()
@@ -73,31 +96,43 @@ sakura$Day <- format(sakura$bloom, "%d")                       #  %d: decimal da
 
 glimpse(sakura)
 # date format are all in <chr>
-# for plotting need to convert with as.numeric() for axes!
-sakura$Year %>% as.numeric() %>% glimpse()
+```
 
+Now we are ready to plot!
+
+```{r}
 # Plotting ----------------------------------------------------------------
 
-ggplot(sakura, aes(x = as.numeric(Year), y = Day_Of_Year)) +
+ggplot(sakura, aes(x = Year, y = Day_Of_Year)) +
   geom_point() +
   geom_line() +
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%d-%b"))
-# does not look very clear...
+```
 
+Does not look very clear...
+
+```{r}
 ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' variable...
   geom_point() +
   geom_smooth(span = 0.2, size = 3) +
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%b-%d"),
                      limits = c(84, 125))
-# Could we make it more... sakura-y?
+```
 
+Slightly better, but could we make it more... sakura-y?
+
+```{r}
 ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' variable...
   geom_point(shape = 8, size = 5, color = "pink") +
   geom_smooth(span = 0.2, color = "#dd1c77", fill = "red", size = 3) +
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%b-%d"),
                      limits = c(84, 125))
-# Better! but does not look good on a drab grey background...
+```
 
+Better! but does not look good on a drab grey background...  
+So let's add a background image!
+
+``` {r}
 #### With background image!
 library(jpeg)
 library(grid)
