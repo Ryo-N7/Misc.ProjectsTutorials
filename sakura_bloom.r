@@ -36,6 +36,8 @@ date_sep <- as.character(sakura$full_flowering_date) %>%
   str_replace_all("(.{1})(.*)", "\\1.\\2") %>%            # split into two backreferences on the first digit, then place a .
   as.data.frame()
 
+glimpse(date_sep)
+
 colnames(date_sep)[1] <- "date_fl"                        # properly name column
 colnames(date_sep)
 
@@ -43,6 +45,7 @@ date_sep <- date_sep %>% separate(date_fl, c("month", "day"), "\\.")    # separa
 
 sakura <- bind_cols(date_sep, sakura)   # combine date_sep into sakura
 sakura <- sakura %>% select(-full_flowering_date, -full_flowering_day_of_year, -x, -data_type_code, -reference_name, -source_code)  # remove extraneous columns
+glimpse(sakura)
 
 library(lubridate)
 # ?make_date()
@@ -50,6 +53,7 @@ library(lubridate)
 # use make_date function to create separate variable in full date format
 sakura <- sakura %>% 
   mutate(bloom = make_date(year, month, day))
+glimpse(sakura)
 
 # Reformat date variables into specific date formats:
 sakura$Day_Of_Year <- as.numeric(format(sakura$bloom, "%j"))   #  %j: decimal day of the year
@@ -76,6 +80,13 @@ ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' 
   scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%b-%d"),
                      limits = c(84, 125))
 # Could we make it more... sakura-y?
+
+ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' variable...
+  geom_point() +
+  geom_smooth(span = 0.2, size = 3, method = "gam", formula = y~s(x, bs = "cs")) +
+  scale_y_continuous(labels = function(x) format(as.Date(as.character(x), "%j"), "%b-%d"),
+                     limits = c(84, 125))
+# with method = lm instead
 
 ggplot(sakura, aes(x = year, y = Day_Of_Year)) +  # or just use original 'year' variable...
   geom_point(shape = 8, size = 5, color = "pink") +
