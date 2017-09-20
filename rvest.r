@@ -309,7 +309,8 @@ library(tidyverse)
 
 url <- ("http://imsdb.com/scripts/Star-Wars-A-New-Hope.html")
 
-newhope <- url %>% read_html() %>% 
+newhope <- url %>% 
+  read_html() %>% 
   html_nodes(xpath = '//pre') %>%
   .[[1]] %>% 
   html_text()
@@ -343,4 +344,128 @@ str(newhopeTokenized)
 
 
 .scrtext > pre:nth-child(1)
+
+
+
+
+
+
+
+
+
+
+
+
+# multiple tables across pages --------------------------------------------
+suppressMessages(library(tidyverse))
+suppressMessages(library(rvest))
+
+# define function to scrape the table data from a page
+get_page <- function(page_id = x) {
+  # default link
+  link <- "http://zipnet.in/index.php?page=missing_mobile_phones_search&criteria=browse_all&Page_No="
+  # build link
+  link <- paste0(link, page_id)
+  
+  # get tables data
+  wp <- read_html(link)
+  wp %>% 
+    html_nodes("#AutoNumber16, #AutoNumber15") %>% 
+    html_table(fill = TRUE) %>% 
+    bind_rows()
+}
+
+
+blah <- get_page(1) %>% as.data.frame()
+
+blah <- get_page(1:3) %>% as.data.frame()
+
+lapply(x = 1:3, get_page())
+
+# get the data from the first three pages 
+iter_page <- 1:3
+# this is just a progress bar
+pb <- progress_estimated(length(iter_page))
+
+# this code will iterate over pages 1 through 3 and apply the get_page() 
+# function defined earlier. The Sys.sleep() part is used to pause the code
+# after each iteration so that the sever is not overloaded with requests.
+map_df(iter_page, ~ {
+  pb$tick()$print()
+  df <- get_page(.x)
+  Sys.sleep(sample(10, 1) * 0.1)
+  as_tibble(df)
+})
+
+?map_df()
+
+
+
+
+
+
+
+
+html_session("http://www.ajnr.org/content/30/7/1402.full") %>%
+  follow_link(css="#T1 a") %>%
+  html_table() %>%
+  View()
+
+list <- read_html("http://www.ajnr.org/content/30/7/1402.full") %>%
+  html_nodes(css=".table-inline li:nth-child(1) a")
+
+
+url <- "http://www.ajnr.org/content/30/7/1402.full"
+page <- read_html(url)
+
+table_urls <- page %>% 
+  html_nodes(".table-inline li:nth-child(1) a") %>%
+  html_attr("data-table-url") %>%
+  xml2::url_absolute(url)
+
+lapply(table_urls, . %>% read_html() %>% html_table()) %>% as.data.frame()
+
+library(plyr)
+jib <- lapply(table_urls, . %>% read_html() %>% html_table()) %>% rbind.fill()
+
+library(data.table)
+jib <- lapply(table_urls, . %>% read_html() %>% html_table()) %>% rbindlist()
+
+
+
+
+div.table:nth-child(11) > div:nth-child(1) > div:nth-child(1) > ul:nth-child(2) > li:nth-child(1) > a:nth-child(1)
+
+
+
+#### baseballl
+
+#all_team_batting > div:nth-child(2)
+
+years <- 2000:2016
+urls <- paste0("http://www.baseball-reference.com/teams/MIL/", years, ".shtml")
+
+head(urls)
+
+get_table <- function(urls) {
+  urls %>%
+    read_html() %>%
+    html_nodes(xpath = '//*[@id="div_team_batting"]/table[1]') %>% 
+    html_table()
+}
+
+results <- sapply(urls, get_table)
+
+results <- results %>% rbindlist()
+
+as.data.frame(results)
+
+link <- "https://www.baseball-reference.com/teams/MIL/2016.shtml"
+#team_batting
+table <- link %>% 
+  read_html() %>% 
+  html_nodes("#team_batting") %>% 
+  html_table() %>% as.data.frame()
+
+glimpse(table)
 

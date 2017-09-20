@@ -148,6 +148,21 @@ skew_x(rgamma(10, 1, 1))
 
 
 
+# Create own functions (economics) ----------------------------------------
+
+GDP_exp <- function(C, I, G, Xn) {
+  C + I + G + Xn
+}
+
+GDP_exp(5, 4, 20, 5)
+
+GDP_inc <- function(W, I, R, P) {
+  W + I + R + P
+}
+
+GDP_inc(45, 500.5, 42587, 23987)
+
+
 
 
 
