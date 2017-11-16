@@ -374,6 +374,509 @@ nested_df$fit[[1]][[1]]
 
 
 
+# Explore purrr -----------------------------------------------------------
+library(purrr)
+library(repurrrsive)
+library(listviewer)
+# necessity to understand the lists being examined.
+# - length of list, homogeneous components/structure, names, types of objects inside
+# with str() use max.level and list.len args to limit volume of list output
+
+listviewer::jsonedit(got_chars, mode = "view")
+
+?str()
+# max.level: displaying specified maximum level of nested structures - list of sublists, default display ALL nesting levels 
+# list.len: numeric -- max. # of list elements to display within level - default = 99!
+
+str(wesanderson, max.level = 1)
+str(wesanderson, max.level = 0)
+str(wesanderson, max.level = 2)
+
+str(got_chars, max.level = 0)
+str(got_chars, max.level = 1)
+str(got_chars, max.level = 2)
+str(got_chars, max.level = 3)
+
+str(got_chars[[1]], list.len = 3)  # show 3 and rest truncated
+str(got_chars[[1]], list.len = 5)  # shows 5 and rest truncated
+str(got_chars[[1]], list.len = 1)  
+
+str(got_chars, ma.level = 1, list.len = 3)
+str(got_chars, ma.level = 2, list.len = 4)
+
+str(got_chars[[1]], max.level = 1, list.len = 5) # show url, id, name, gender, culture!
+
+
+
+# Intro to map(): extracting elements! ------------------------------------
+library(purrr)
+library(repurrrsive)
+library(listviewer)
+
+# vectorized/list-ized operations
+(3:5)^2
+sqrt(c(9, 16, 25))
+# through R: raise to power of 2 and take sqrt() applied to each individual element in vector
+# inside is a for() loop:
+for (i in 1:n) {
+  output[[i]] <- f(input[[i]])
+}
+
+# IF input = list, apply function f() to each lement of list to list-ize the computation
+# necessity guarantee that function f() can be apply to each element in list specified!
+# purrr::map() is a function for applying a function to each element of a list, lapply()
+map(c(9, 16, 25), sqrt)
+# template: map(your_list, your_function)
+
+# Extract elements with "name"
+map(got_chars[1:4], "name")
+map(got_chars[1:4], "culture")
+map(got_chars[1:4], "gender")
+got_chars %>% map("name")
+# shortcut to create a function that extract elements based on its name
+# >>> provide "TEXT" to extract the element named "TEXT"
+
+# shortcut 2: use positive integer to extract element based on position
+map(got_chars[5:8], 3)   # position 3 = "name"
+got_chars %>% map(3)
+# provide i to extract the i-th element
+
+got_chars[[1]] %>% names()
+# playedBy = 18th position 
+got_chars %>% map("playedBy")
+got_chars[3:7] %>% map(18)
+got_chars %>% map("nothere")  # returns list of naked NULL elements
+got_chars[3:7] %>% map(255)   # returns list of naked NULL elements
+
+# Type-specific mapping()
+# map() always returnst LIST >>> even if all elements = same and length = 1
+# prefer return atomic vector >>> use type-specific map()
+
+map(got_chars[9:12], "name")           # compare this with below:
+map_chr(got_chars[9:12], "name")
+# [1] "Daenerys Targaryen" "Davos Seaworth"     "Arya Stark"         "Arys Oakheart"
+map_chr(got_chars[9:12], 3)
+
+str(got_chars[[1]])   # id is integer
+got_chars[9:12] %>% map_int(2)
+# [1] 1303 1319  148  149          NOICE
+
+str(got_chars[1], max.level = 2)  # alive  is logical object
+got_chars[10:18] %>% map_lgl("alive")
+# [1]  TRUE  TRUE FALSE  TRUE  TRUE FALSE  TRUE  TRUE FALSE        NOICE
+
+# Extracting multiple values:
+got_chars[[3]][c("name", "culture", "gender", "born")]
+# usage of single [] and character vector to index by name of elements
+# in map() we can map [] just like any other function!
+map(.x, .f, ...)  # .f will be []
+x <- got_chars %>% map(`[`, c("name", "culture", "gender", "born"))
+str(x[16:17])   # list of 2 of a list of 4 each
+# or use the extract() function from magrittr
+library(magrittr)
+x <- got_chars %>% map(extract, c("name", "culture", "gender", "born"))
+str(x[16:17])   # output is the same as above!
+
+got_chars[[1]] %>% names()    # name = 3, gender = 4, culture = 5, born = 6, died = 7
+x <- got_chars %>% map(extract, c(3, 4, 5, 6, 7))
+str(x[16:17])   # NOICE
+
+
+# Data frame output:
+
+# [] is non-simplifying, elements returned as LIST. map() itself returnst as LIST.
+# went from recursive list to recursive list output >>> how to return a dataframe instead?
+got_chars[2:4] %>% map_df(extract, c("name", "culture", "gender", "born"))
+# A tibble: 3 x 4
+# name  culture gender                         born
+# <chr>    <chr>  <chr>                        <chr>
+# 1  Tyrion Lannister            Male  In 273 AC, at Casterly Rock
+# 2 Victarion Greyjoy Ironborn   Male In 268 AC or before, at Pyke
+# 3              Will            Male                             
+
+# Variables = automatically type-converted. 
+# Much safer to explicit specify type and build dataframe manually:
+library(tibble)
+got_chars %>%  {
+  tibble(
+    name = map_chr(., "name"),           # '.' is placeholder for got_chars input
+    culture = map_chr(., "culture"),     # {} prevent got_chars as arg in tibble()
+    gender = map_chr(., "gender"),
+    id = map_int(., "id"),
+    born = map_chr(., "born"),
+    alive = map_lgl(., "alive")
+  )
+}
+
+# with positive integers to specify element:
+got_info <- got_chars %>% 
+  map_df(extract,
+         c(2, 3, 4, 5, 6, 7, 8))
+str(got_info)                  # integer, chr, logical types automatically converted...!
+
+
+
+# Simplifying data from GitHub users list ---------------------------------
+library(repurrrsive)
+library(listviewer)
+library(jsonlite)
+library(dplyr)
+library(tibble)
+library(purrr)
+
+# Non-rectangular data structure >>> create neat data frame
+# Objects: ex. JSON, XML format from API   (when csv is not option)
+
+# gh_users: 
+# - one component for each of the 6 users
+# - each component is LIST with user info
+
+str(gh_users)
+str(gh_users, max.level = 1)
+str(gh_users, list.len = 5)
+str(gh_users[[1]], list.len = 5)
+str(gh_users, list.len = 1)
+str(gh_users[5], list.len = 4)
+
+
+map(.x, .f, ... )
+# .x = list   >>> gh_users
+# .f = function to each component of list
+# ... = etc.
+
+map(gh_users, "login")  # extract element "login" from gh_users
+
+str(gh_users, max.level = 2, list.len = 18)
+# element 18 gives us the full name of each github user:
+map(gh_users, 18)
+
+# provide “TEXT” to extract the element named “TEXT”
+# >>> equivalent to function(x) x[["TEXT"]]
+# provide i to extract the i-th element
+# >>> equivalent to function(x) x[[i]]
+# OR with %>% 
+gh_users %>% 
+  map("login")
+
+gh_users[[1]] %>% names()
+gh_users %>% 
+  map("created_at")
+# OR
+gh_users %>% 
+  map(29)
+
+# Extract multiple values
+gh_users[[1]][c("name", "login", "id", "location")]
+
+x <- map(gh_users, `[`, c("login", "name", "id", "location"))
+str(x[1:2])
+# OR 
+x <- map(gh_users, magrittr::extract, c("login", "name", "id", "location"))
+str(x[1:2])
+
+x <- map(gh_users, magrittr::extract, c(1, 18, 2, 21))
+str(x[1:2])
+
+# Data frame output:
+map_df(gh_users, magrittr::extract, c(1, 18, 2, 21))
+# nice df output!
+# automatic type conversion by map_df()
+# may be necessary to explicitly specify type and build df 
+
+gh_users %>% {
+  tibble(
+    login = map_chr(., "login"),
+    name = map_chr(., 18),
+    id = map_int(., 2),
+    location = map_chr(., "location")
+  )
+}
+
+# gh_repos
+# - one component for each 6 users
+# - each component = list of repos
+# - several of repo list also repo
+str(gh_repos, max.level = 1)
+str(gh_repos, max.level = 2)
+
+str(gh_repos[[2]], max.level = 1)
+
+
+# Vector input to extraction shortcuts
+# rather than name or position >>> use vector
+# - the j-th element addresses the j-th level of the hierarchy
+
+gh_repos %>% 
+  map_chr(c(1, 3))   # 1 = first repo,  3 = full name
+# NOT elements 1 and 3 of gh_repos
+
+str(gh_repos[[2]], max.level =  3, list.len = 10)
+
+str(gh_repos[[2]], max.level =  2)
+str(gh_repos[[2]], max.level =  1)
+
+gh_repos %>% 
+  map_chr(c(1, 13))
+
+gh_repos %>% 
+  map_chr(c(1, 4, 1))
+
+# List inside a data frame ####
+
+# Get df with one row/repo, variables ID which GitHub user ownership, repo name, etc.
+
+# 1. Put gh_repos list into data_frame, ID along usernames
+
+user_names <- map_chr(gh_repos, c(1, 4, 1))
+
+user_df <- gh_repos %>% 
+  set_names(user_names) %>% 
+  enframe("username", "gh_repos")
+
+user_df
+# username + list of 30 lists from gh_repos
+
+user_df %>% 
+  mutate(num_repos = map_int(gh_repos, length))
+# count length of repos as number of repos within gh_repos for each username
+
+# all repos for user one
+user_one <- user_df$gh_repos[[1]]
+
+one_repo <- user_one[[1]]
+one_repo
+
+# insidie is list of repo info
+str(one_repo, max.level = 1, list.len = 5)
+
+one_repo[c("name", "fork", "open_issues")]
+
+# create df of all of user one's repos >>> show repo name, fork and open_issues
+map_df(user_one, `[`, c("name", "fork", "open_issues"))
+
+# create above for each user's each repo inside repo_info (name, fork, open_issues)!
+user_df %>% 
+  mutate(repo_info = gh_repos %>% 
+           map(. %>% map_df(`[`, c("name", "fork", "open_issues"))))
+
+# user-specific tibble in repo_info, open lists up into data frame
+rdf <- user_df %>% 
+  mutate(repo_info = gh_repos %>% 
+           map(. %>% map_df(`[`, c("name", "fork", "open_issues")))
+  ) %>% 
+  select(-gh_repos) %>% 
+  tidyr::unnest()
+
+# now name, fork, open_issues are own column
+# each row contains username + specific repo
+
+
+# show repos of each user with most open issues
+rdf %>% 
+  filter(!fork) %>% 
+  select(-fork) %>% 
+  group_by(username) %>% 
+  arrange(username, desc(open_issues)) %>% 
+  slice(1:3)                                # show only top 3 repos (rows)
+
+
+
+# Specifying the function in map() + parallel mapping ---------------------
+
+library(purrr)
+library(repurrrsive)
+
+# map()
+# map(vector_or_list_input, function_to_apply, other_options)
+
+# specify general .f: 
+# - an existing function
+# - anonymous function
+# - formula
+
+aliases <- set_names(map(got_chars, "aliases"), 
+                     map_chr(got_chars, "name"))
+aliases
+
+aliases <- aliases[c("Theon Grejoy", "Asha Greyjoy", "Brienne of Tarth")]
+aliases
+
+# Existing function:
+my_fun <- function(x) paste(x, collapse = " | ")
+
+# collapse list elements into one separated by | 
+map(aliases, my_fun)
+
+# Anonymous function:
+map(aliases, function(x) paste(x, collapse = " | "))
+# same result as previous!
+map(aliases, paste, collapse = " | ")
+# same as other previous, insert collapse as "..." part of map()
+
+# Anonymous function, formula:
+map(aliases, ~ paste(.x, collapse = " | "))
+# same as above, use ~ to define as function, use .x to refer to input
+
+
+# In workflow:
+# pilot idea on SINGLE ELEMENT >>> scale up to all elements in vector/list
+
+# Step 1:
+(a <- map(got_chars, "aliases")[[19]]) ## OOPS! NULL --> a useless example
+#> NULL
+
+# Step 2:
+(a <- map(got_chars, "aliases")[[16]]) ## ok good
+#> [1] "Bran"            "Bran the Broken" "The Winged Wolf"
+
+# Step 3:
+paste(a, sep = " | ")                  ## OOPS! not what I want
+#> [1] "Bran"            "Bran the Broken" "The Winged Wolf"
+
+# Step 4:
+paste(a, collapse = " | ")             ## ok good
+#> [1] "Bran | Bran the Broken | The Winged Wolf"
+
+# Step 5:
+got_chars[15:17] %>%                   ## I am a programming god
+  map("aliases") %>% 
+  map_chr(paste, collapse = " | ")
+#> [1] "Varamyr Sixskins | Haggon | Lump"                         
+#> [2] "Bran | Bran the Broken | The Winged Wolf"                 
+#> [3] "The Maid of Tarth | Brienne the Beauty | Brienne the Blue"
+
+# List to DATA FRAME:
+
+# Simplied all aliases to single string for each character >>> hold as atomic character
+# vector instead of as list!
+# use enframe() function to take named vector and promote as proper variable!
+
+aliases <- set_names(map(got_chars, "aliases"), 
+                     map_chr(got_chars, "name"))
+aliases
+
+map_chr(aliases[c(3, 10, 20, 24)], ~ paste(.x, collapse = " | ")) %>% 
+  tibble::enframe(value = "aliases")  # value = set column/variable name!
+
+??enframe()
+
+# alternative:
+tibble::tibble(
+  name = map_chr(got_chars, "name"),
+  aliases = got_chars %>% 
+    map("aliases") %>% 
+    map_chr(~ paste(.x, collapse = " | "))
+) %>% 
+  dplyr::slice(c(3, 10, 20, 24))
+
+# THREE different ways to specify function `.f` in map() function in purrr
+####
+map(aliases, function(x) paste(x, collapse = "|")) 
+map(aliases, paste, collapse = "|")
+map(aliases, ~ paste(.x, collapse = " | "))
+####
+
+got_chars[[1]]
+
+library(tibble)
+allegiances <- tibble(
+  name = map_chr(got_chars, "name"),
+  house = got_chars %>% 
+    map("allegiances") %>% 
+    map_chr(~ paste(.x, collapse = " | ")))
+
+
+# Parallel map ####
+
+# map2()
+# map function over two vectors/lists in parallel
+
+# map2(.x, .y, .f, ... )
+# map2(input_one, input_two, function_to_apply, other_options)
+
+names <- got_chars %>% 
+  map_chr("name")
+
+birth <- got_chars %>% 
+  map_chr("born")
+
+my_fun <- function(x, y) paste(x, "was born", y)
+
+# map over existing function:
+map2_chr(names, birth, my_fun) %>% head(3)
+# [1] "Theon Greyjoy was born In 278 AC or 279 AC, at Pyke"    
+# [2] "Tyrion Lannister was born In 273 AC, at Casterly Rock"  
+# [3] "Victarion Greyjoy was born In 268 AC or before, at Pyke"
+
+# map over anonymous function (conventional form)
+map2_chr(names, birth, function(x, y) paste(x, "was born", y)) %>% head(3)
+
+# map over anonymous function (~ formula form)
+map2_chr(names[1:3], birth[1:3], ~ paste(.x, "was born", .y))
+map2_chr(names, birth, ~ paste(.x, "was born", .y)) %>% head(3)
+
+# pmap() ####
+
+# what if you need to map function over two or MORE vectors/lists in parallel?
+
+# pmap(.l, .f, ... )
+# pmap(list_of_input_lists, function_to_apply, other_options)
+
+df <- got_chars %>% {
+  tibble::tibble(
+    name = map_chr(., "name"),
+    aliases = map_chr(., "aliases"),
+    allegiances = map_chr(., "allegiances")
+  )
+}
+
+my_fun <- function(name, aliases, allegiances) {
+  paste(name, "has", length(aliases), "aliases and", 
+        length(allegiances), "allegiances")
+}
+
+df %>% 
+  pmap_chr(my_fun) %>% 
+  head(3)
+
+# gh_users cuz GOT is not cooperating...
+df <- gh_users %>% {
+  tibble::tibble(
+    name = map_chr(., "name"),
+    id = map_chr(., "id"),
+    location = map_chr(., "location")
+  )
+}
+
+my_fun <- function(name, id, location) {
+  paste(name, "a.k.a.", id, "is based in", 
+        location, "it's a wonderful place")
+}
+
+df %>% 
+  pmap_chr(my_fun) %>% 
+  head(3)
+# LOL
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
