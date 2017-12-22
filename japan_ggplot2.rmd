@@ -1,0 +1,126 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "December 8, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Japan ggplot2
+
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+
+# Hokkaido Prefecture shapefile
+
+sf_pref01 <- jpndistrict::jpn_pref(1, district = FALSE) %>% 
+  st_simplify(dTolerance = 0.001)
+
+# map base:
+
+p_base <- sf_pref01 %>% 
+  ggplot() +
+  geom_sf(fill = "white") +
+  xlim(137, 149) + ylim(41, 46) +
+  theme(panel.border = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        plot.background = element_rect(color = "black"),
+        plot.caption = element_text(size = 6)) +
+  labs(caption = "References: ____")
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+```{r}
+library(tidyverse)
+
+sf_ja <- 1:47 %>% magrittr::extract(-13) %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>% 
+    st_simplify(dTolerance = 0.01) %>% 
+    mutate(city_code = as.numeric(city_code)) %>% 
+    filter(city_code != 13421) %>% 
+    st_union() %>% 
+    as.data.frame() %>% 
+    mutate(jis_code = "13", prefecture = "東京都") %>% 
+    magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
+    st_as_sf()
+
+sf_ja_omit47 <- sf_ja %>% 
+    filter(jis_code != "47")
+
+sf_ja_pref47 <- sf_ja %>% 
+    filter(jis_code == "47") %>% 
+    magrittr::set_names(c("jis_code", "prefecture", "geometry"))
+
+sf_ja_pref47$geometry %<>% magrittr::add(c(5.6, 17.5))
+
+sf_ja_pref47 %<>% st_set_crs(value = 4326)
+
+
+p <- ggplot(sf_ja_omit47) + 
+  geom_sf() + 
+  geom_sf(data = sf_pref13, inherit.aes = TRUE) + 
+  geom_sf(data = sf_ja_pref47, inherit.aes = TRUE) + 
+  geom_segment(aes(x = round(st_bbox(sf_ja_omit47)[1], 0), xend = 132.5, 
+                   y = 40, yend = 40)) + 
+  geom_segment(aes(x = 132.5, xend = 138, 
+                   y = 40, yend = 42)) + 
+  geom_segment(aes(x = 138, xend = 138, 
+                   y = 42, yend = round(st_bbox(sf_ja_omit47)[4], 0))) +
+  xlab(NULL) + ylab(NULL) + 
+  theme(plot.caption = element_text(size = 6)) + 
+  labs(caption = "この地図は、国土地理院長の承認を得て、\n同院発行の数値地図（国土基本情報）電子国土基本図（地図情報）\nを使用したものである (承認番号　平28情使、第603号)")
+
+# finished plot:
+p
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

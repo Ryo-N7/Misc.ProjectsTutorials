@@ -1,0 +1,538 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "December 19, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+FROM: strimas.com
+
+## tidy-sf for mapping
+
+```{r}
+library(sf)
+library(tidyverse)
+library(viridis)
+library(rvest)
+
+```
+
+Simple Features: opensource standard for representation of real-world objects
+
+>>> features:
+- point
+- linestring
+- polygon
+- etc.
+
+Usage of DATA FRAMES vs. S4 objects in sp package
+
+Column == attribute
+Row == feature
+
+list-column `sfc` for storing feature geometries >>> classs `sfg` 
+
+```{r}
+nc <- st_read(system.file("shape/nc.shp", package = "sf"))
+
+glimpse(nc)
+
+# data from only first two counties in NC
+nc <- nc[1:2, ]
+nc <- nc %>% slice(1:2)
+
+# convert to SpatialPolygonsDataFrame
+nc_sp <- as(nc, "Spatial")
+
+class(nc)
+glimpse(nc)
+as_tibble(nc)
+
+# compare to storage methods in sp:
+
+class(nc_sp)
+str(nc_sp)
+
+```
+
+Access geometry list-clumn >>> class `sfc` with `st_geometry()`.
+
+```{r}
+(nc_geom <- st_geometry(nc))
+
+st_geometry(nc) %>% class()
+
+attributes(nc_geom)
+
+```
+
+Individual simple features == `sfg` objects >>> classes of specific type of feature
+
+```{r}
+nc_geom[[1]] %>% class()
+# XY and MULTIPOLYGON
+```
+
+## Using ggplot with sf objects
+
+sp == conversion with `fortify()` before usage with ggplot2
+
+sf == use `geom_sf()`
+
+```{r}
+nc <- st_read(system.file("shape/nc.shp", package = "sf"), quiet = TRUE)
+
+nc %>% 
+  ggplot() +
+  geom_sf(aes(fill = AREA)) + 
+  scale_fill_viridis("Area") +
+  ggtitle("Area of counties in NC") +
+  theme_bw()
+
+```
+
+Use `coord_sf()` to plot features in different project
+
+Ex. Albers equal area projection.
+
+```{r}
+nc %>% 
+  ggplot() +
+  geom_sf(aes(fill = AREA)) +
+  scale_fill_viridis("Area") +
+  coord_sf(crs = st_crs(102003)) +
+  ggtitle("Area of countines in NC (Albers projection)") +
+  theme_bw()
+
+```
+
+## Using dplyr for data munging
+
+```{r}
+nc %>% 
+  mutate(area_km2 = AREA * 10000) %>% 
+  select(name = NAME, area_km2) %>% 
+  filter(area_km2 > 2000) %>% 
+  arrange(desc(area_km2)) %>% 
+  slice(1:3)
+
+
+```
+
+geometry column kept EVEN if NOT specified in `select()`, same with `transmute()`! 
+
+Manipulate geometry column with certain sf functions:
+
+```{r}
+nc %>% 
+  mutate(area_m2 = st_area(geometry)) %>% 
+  select(name = NAME, area_m2, area = AREA) %>% 
+  head() %>% 
+  as.tibble()
+```
+
+
+## Grouped operations with dplyr
+
+```{r}
+nc_groups <- nc %>% mutate(group = sample(LETTERS[1:3], nrow(.), replace = TRUE))
+
+nc_mean_area <- nc_groups %>% 
+  group_by(group) %>% 
+  summarise(area_mean = mean(AREA))
+
+nc_mean_area %>% 
+  ggplot() +
+  geom_sf(aes(fill = area_mean)) +
+  scale_fill_distiller("Area", palette = "Reds") +
+  ggtitle("Mean area by group") +
+  theme_bw()
+
+```
+
+Attribute AND geometric data aggregated. Geometries within each group combined + boundaries are dissolved! Usage of `sf_union()` internally.
+
+```{r}
+nc_groups %>% 
+  select(group, AREA) %>% 
+  group_by(group) %>% 
+  mutate(area_prop = sum(AREA)) %>% 
+  as_tibble()
+
+nc_groups %>% 
+  select(group, AREA) %>% 
+  group_by(group) %>% 
+  filter(mean(AREA) > 0.13) %>% 
+  as_tibble()
+
+
+```
+
+
+## Joins with dplyr
+
+Combine with county-level population data (Wikipedia)
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/List_of_counties_in_North_Carolina"
+
+pop <- url %>% 
+  read_html() %>% 
+  html_nodes("table.wikitable:nth-child(9)") %>% 
+  html_table() %>% 
+  `[[`(1) %>% 
+  select(County, starts_with("Population")) %>% 
+  set_names(c("county", "population")) %>% 
+  mutate(county = stringr::str_replace(county, " County", ""),
+         population = gsub("(^[0-9]*???)|,", "", population) %>% parse_integer()) 
+                                              # or use iconv()
+
+glimpse(pop)
+
+pop %>% 
+  arrange(desc(population))
+
+nc %>% 
+  transmute(county = as.character(NAME)) %>% 
+  inner_join(pop, by = "county") %>% 
+  ggplot() +
+  geom_sf(aes(fill = population)) +
+  scale_fill_viridis("Population", labels = scales::comma) +
+  ggtitle("County-level population in NC") +
+  theme_bw()
+
+
+```
+
+for joining SPATIAL objects >>> use `st_join()`! 
+
+
+## tidyr verbs
+
+Use NC births in counties
+
+```{r}
+nc_gathered <- nc %>% 
+  select(couunty = NAME, BIR74, BIR79, -geometry) %>% 
+  slice(1:3) %>% 
+  gather(key = year, value = births, BIR74, BIR79)
+
+nc_gathered
+
+nc_gathered %>% 
+  spread(year, births)
+
+```
+
+
+
+
+
+
+# Lobster article:
+
+
+```{r}
+library(here)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+library(hrbrthemes)
+library(gganimate)
+
+
+cols <- c("year", "state", "species", "tons", "pounds", "value")
+
+lobsters <- here("lobsters/") %>% 
+  list.files("^lobster", full.names = TRUE) %>% 
+  map_df(read_csv, skip = 5, col_names = cols) %>% 
+  mutate(
+    species = recode(species, 
+                     "LOBSTER, AMERICAN" = "American Lobster",
+                     "LOBSTER, BANDED SPINY" = "Banded Spiny Lobster",
+                     "LOBSTER, CALIFORNIA SPINY" = "California Spiny Lobster", 
+                     "LOBSTER, CARIBBEAN SPINY" = "Caribbean Spiny Lobster", 
+                     "LOBSTER, SLIPPER" = "Slipper Lobster"),
+    state = recode(state, 
+                   "Florida East Coast" = "Florida",
+                   "Florida West Coast" = "Florida")) %>% 
+  group_by(year, state, species) %>% 
+  summarize_all(funs(sum)) %>% 
+  filter(state != "Hawaii") %>% 
+  ungroup()
+
+glimpse(lobsters)
+
+```
+
+
+Lobster catch by species:
+
+```{r}
+
+lobster_trend <- lobsters %>% 
+  group_by(year, species) %>% 
+  select(-state) %>% 
+  summarize_all(funs(sum))
+
+lobster_trend %>% 
+  ggplot(aes(year, tons / 1000)) +
+  geom_line(aes(color = species, group = species), size = 1.15) + # add group = species
+  scale_color_brewer(NULL, palette = "Set1") +
+  scale_y_comma("Catch (millions kg)") +
+  scale_x_continuous("Year", breaks = seq(1950, 2010, by = 10)) +
+  labs(title = "US commercial catch of lobster by species") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+
+
+```
+
+https://kohske.wordpress.com/2010/12/27/faq-geom_line-doesnt-draw-lines/
+
+
+Catch by state over time.
+
+Top_9 states:
+
+```{r}
+top_9_states <- lobsters %>% 
+  filter(species == "American Lobster") %>% 
+  group_by(state) %>% 
+  select(-year, -species) %>% 
+  summarize_all(funs(sum)) %>% 
+  top_n(9, tons) %>% 
+  arrange(desc(tons)) %>% 
+  pull(state)      # grab the values in specified column
+
+lobster_state <- lobsters %>% 
+  filter(species == "American Lobster",
+         state %in% top_9_states) %>% 
+  mutate(state = factor(state, levels = top_9_states))
+
+lobster_state %>% 
+  ggplot(aes(year, tons / 1000)) +
+  geom_line(aes(color = state), size = 1.15) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_comma("Catch (millions, kg)") +
+  scale_x_continuous("Year", breaks = seq(1950, 2010, by = 10)) +
+  labs(title = "US commercial catch of American Lobster") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+  
+
+```
+
+MAINE! 
+
+
+## Animated map
+
+```{r}
+# state boundaries
+states <- ne_states(iso_a2 = c("US", "CA"), returnclass = "sf") %>% 
+  filter(!postal %in% c("AK", "HI")) %>%  # filter out alaska and hawaii
+  select(country = iso_a2, state = name, state_code = postal, geometry)
+
+glimpse(states)
+str(states)
+
+# join with lobster data
+lobster_sf <- lobsters %>% 
+  filter(species == "American Lobster") %>% 
+  complete(state, year, fill = list(tons = 0, pounds = 0, value = 0)) %>% # fill in NAs
+  select(-species) %>% 
+  inner_join(states, ., by = "state")
+
+glimpse(lobster_sf)
+
+# log scaling
+rng <- ceiling(range(log10(lobster_sf$tons + 1)))
+brk <- rng[1]:rng[2]
+lbl <- c(0, bquote(10^1), bquote(10^2), bquote(10^3), bquote(10^4), bquote(10^5))
+
+proj <- paste0("+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96",
+               "+x_0=0 +y_0=0 +ellps=GRS80 +datum=NAD83 +units=m +no_defs")
+
+g <- ggplot() +
+  geom_sf(data = states, fill = "grey80", color = "grey60") +
+  geom_sf(data = lobster_sf,
+          aes(fill = log10(tons + 1), frame = year)) +
+  scale_fill_viridis("Annual commercial lobster catch (metric tons)",
+                     breaks = brk, labels = lbl, 
+                     guide = guide_colorbar(title.position = "top",
+                                            title.hjust = 0.5)) +
+  coord_sf(crs = proj,
+           xlim = c(553469.1, 2259794),
+           ylim = c(-259859.5, 1406546.0)) +
+  labs(title = NULL, caption = "NOAA") +
+  theme_bw() +
+  theme(legend.position = "bottom", 
+        legend.key.width = unit(0.15, "npc"),
+        plot.title = element_text(hjust = 0.5))
+
+gganimate(g, interval = 0.2)
+
+
+```
+
+
+
+
+## Birds
+
+
+```{r}
+library(tidyverse)
+library(rvest)
+library(stringr)
+library(sf)
+library(leaflet)
+library(leaflet.extras)
+library(USAboundaries)
+library(rnaturalearth)
+library(viridis)
+library(here)
+```
+
+
+NA regional statistics
+
+```{r}
+ebird_regions <- data_frame(
+  region_code = c("CA", "US", "MX"),
+  region_name = c("Canada", "United States", "Mexico"), 
+  region_level = "country")
+
+country_data <- function(country) {
+  base_url <- "http://ebird.org/ebird/country/%s?yr=all"
+  
+  page <- sprintf(base_url, country) %>% 
+    read_html()
+  
+  counts <- page %>% 
+    html_nodes(".hs-section-count") %>% 
+    html_text() %>% 
+    str_extract("[0-9,]+") %>% 
+    parse_number()
+  
+  data_frame(n_species = counts[1], 
+             n_checklists = counts[2])
+  
+}
+
+ebird_regions <- ebird_regions %>% 
+  mutate(country_df = map(region_code, country_data)) %>% 
+  unnest()
+
+```
+
+## Extraction function
+
+Extracts all sub-region data within region
+>>> use `Sys.sleep()` function to pause between each page load
+
+
+```{r}
+extract_subregion_data <- function(region_code, region_level, sleep = 5) {
+  Sys.sleep(sleep)
+  
+  base_url <- "http://ebird.org/ebird/%s/%s/regions?yr=all"
+  
+  page <- sprintf(base_url, region_level, region_code) %>% 
+    read_html()
+  
+  region_stats <- html_table(page)
+  # skip this region if no data at sub-region
+  if (length(region_stats) == 0) {
+    return(data_frame())
+  }
+  
+  region_stats <- region_stats[[1]] %>% 
+    set_names(c("rank", "region_name", "n_species", "n_checklists"))
+  
+  # region codes
+  region_urls <- page %>% 
+    html_nodes("td a") %>% 
+    html_attr("href")
+  
+  region_codes <- region_urls %>% 
+    str_extract("[-A-Z0-9]+\\?") %>% 
+    str_replace("\\?", "")
+  
+  region_levels <- region_urls %>% 
+    str_extract("ebird/[a-z0-9]+") %>% 
+    str_replace("ebird/", "")
+  
+  mutate(region_stats, 
+         region_code = region_codes, 
+         region_level = region_levels) %>% 
+    select(region_code, region_name, region_level,
+           n_species, n_checklists) %>% 
+    as_tibble()
+}
+
+# state data
+state_df <- map_df(ebird_regions$region_code, extract_subregion_data,
+                   region_level = "country")
+
+# country data
+county_df <- map_df(state_df$region_code, extract_subregion_data, 
+                    region_level = "subnational1")
+
+# combine all
+
+ebird_regions <- ebird_regions %>% bind_rows(state_df, county_df)
+
+glimpse(ebird_regions)
+
+getwd()
+write.csv(ebird_regions, "ebird_regions.csv")
+
+```
+
+## Top hotspots 
+
+
+```{r}
+extract_top_hotspot <- function(region_code, region_level, sleep = 5) {
+  
+  Sys.sleep(sleep)
+  
+  base_url <- "http://ebird.org/ebird/%s/%s/hotspots?yr=all"
+  
+  th <- sprintf(base_url, region_level, region_code) %>% 
+    read_html() %>% 
+    html_node("td a") %>% 
+    html_attr("href") %>% 
+    str_extract("L[0-9]+")
+  
+  if (!is.character(th) || length(th) != 1) {
+    return(NA_character_)
+  } else {
+    return(th)
+  }
+  
+}
+
+ebird_regions <- ebird_regions %>% 
+  mutate(top_hotspot = map2_chr(region_code, region_level, extract_top_hotspot))
+
+str(county_df)
+
+```
+
+
+
+
+
+
+
+
+
