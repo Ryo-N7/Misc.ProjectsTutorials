@@ -1,0 +1,126 @@
+---
+title: "customer churn"
+author: "RN7"
+date: "November 24, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Predicting customer churn
+
+>>> Logistic regression, decision trees, random forest
+
+Customer churn: when customers/subscribers stop doing business with company/serice
+>>> loss of clients or customers     ex. telecom == ^options
+
+IBM sample datasets: telecom
+
+```{r}
+library(dplyr)
+library(corrplot)
+library(ggplot2)
+library(ggthemes)
+library(gridExtra)
+library(caret)
+library(MASS)
+library(randomForest)
+library(party)
+
+download.file("https://community.watsonanalytics.com/wp-content/uploads/2015/03/WA_Fn-UseC_-Telco-Customer-Churn.csv", "~/R_materials/churn.csv")
+
+churn <- read.csv("~/R_materials/churn.csv")
+
+glimpse(churn)
+# target var: Churn
+
+churn 
+
+sapply(churn, function(x) sum(is.na(x)))
+# Total charges has 11 NAs
+
+churn <- churn %>% na.omit()
+
+glimpse(churn)
+
+
+cols_recode1 <- c(10:15)
+
+for(i in 1:ncol(churn[,cols_recode1])) {
+        churn[,cols_recode1][,i] <- as.factor(mapvalues
+                                              (churn[,cols_recode1][,i], 
+                                                from =c("No internet service"),to=c("No")))
+}
+
+glimpse(churn)
+
+
+churn$MultipleLines <- as.factor(mapvalues(churn$MultipleLines, 
+                                           from=c("No phone service"),
+                                           to=c("No")))
+
+```
+
+Min tenure: 1 month
+Max tenure: 72 months
+>>> group into 5: "0-12 months", "12-24 months", "24-48 months", "48-60 months", "60+ months"
+
+```{r}
+
+range(churn$tenure)
+
+churn$tenure_group <- cut(churn$tenure, breaks = c(0, 12, 24, 48, 60, Inf), 
+                         labels = c("0-12 Month", "12-24 Month", "24-48 Months",
+                                    "48-60 Month", "> 60 Month"))
+
+churn$SeniorCitizen <- as.factor(mapvalues(churn$SeniorCitizen,
+                                      from=c("0","1"),
+                                      to=c("No", "Yes")))
+
+churn <- churn %>% select(-customerID, -tenure)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
