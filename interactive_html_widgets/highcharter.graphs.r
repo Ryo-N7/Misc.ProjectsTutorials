@@ -287,7 +287,8 @@ highchart() %>%
            tickInterval = 5) %>%
   hc_colors(cols) %>%
   hc_chart(style = list(fontFamily = "Georgia",
-                        fontWeight = "bold"))
+                        fontWeight = "bold")) %>% 
+  hc_tooltip(shared = TRUE)
 # opposite = TRUE to place 2nd axis on RIGHT SIDE, if not both on same side...
 # map each series to correct axis with yAxis = 0, 1...
 

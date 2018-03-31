@@ -21,7 +21,10 @@ library(ggplot2)
 # Hokkaido Prefecture shapefile
 
 sf_pref01 <- jpndistrict::jpn_pref(1, district = FALSE) %>% 
-  st_simplify(dTolerance = 0.001)
+  st_simplify(dTolerance = 0.001) %>% 
+    magrittr::set_names(c("jis_code", "prefecture", "geometry"))
+
+str(sf_pref01)
 
 # map base:
 
@@ -37,7 +40,7 @@ p_base <- sf_pref01 %>%
         plot.caption = element_text(size = 6)) +
   labs(caption = "References: ____")
 
-
+p_base
 
 
 
@@ -65,7 +68,7 @@ sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>%
     filter(city_code != 13421) %>% 
     st_union() %>% 
     as.data.frame() %>% 
-    mutate(jis_code = "13", prefecture = "東京都") %>% 
+    mutate(jis_code = "13", prefecture = "?????????") %>% 
     magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
     st_as_sf()
 
@@ -78,8 +81,12 @@ sf_ja_pref47 <- sf_ja %>%
 
 sf_ja_pref47$geometry %<>% magrittr::add(c(5.6, 17.5))
 
+class(sf_ja_pref47)
+
 sf_ja_pref47 %<>% st_set_crs(value = 4326)
 
+sf_ja_omit47 <- sf_ja_omit47 %>% 
+  magrittr::set_names(c("jis_code", "prefecture", "geometry"))
 
 p <- ggplot(sf_ja_omit47) + 
   geom_sf() + 
@@ -92,8 +99,7 @@ p <- ggplot(sf_ja_omit47) +
   geom_segment(aes(x = 138, xend = 138, 
                    y = 42, yend = round(st_bbox(sf_ja_omit47)[4], 0))) +
   xlab(NULL) + ylab(NULL) + 
-  theme(plot.caption = element_text(size = 6)) + 
-  labs(caption = "この地図は、国土地理院長の承認を得て、\n同院発行の数値地図（国土基本情報）電子国土基本図（地図情報）\nを使用したものである (承認番号　平28情使、第603号)")
+  theme(plot.caption = element_text(size = 6)) 
 
 # finished plot:
 p

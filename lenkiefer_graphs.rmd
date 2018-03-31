@@ -1,0 +1,232 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "February 7, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Len Kiefer: mortgage rate increases graphs 
+
+http://lenkiefer.com/2018/02/05/comparing-recent-periods-of-mortgage-rate-increases/
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(tidyquant)
+library(tibbletime)
+library(ggridges)
+library(viridis)
+library(cowplot)
+library(ggbeeswarm)
+
+```
+
+
+Mortgage data from freddiemac.com: http://www.freddiemac.com/pmms/docs/historicalweeklydata.xls
+
+```{r}
+tickers <- c("MORTGAGE30US")
+
+df <- tq_get(tickers, get = "economic.data", from = "2000-01-01") # get data in tibble format
+
+df <- tq_get(tickers, get = "economic.data", from = "2012-01-01")
+
+```
+
+ID periods of rapid rate increases! Use algorithmic apporaches? (quantmod::findPeaks()), etc.
+
+```{r}
+
+df_1 <- df %>% 
+  filter(date >= "2013-05-02" & date <= "2013-09-12") %>% 
+  mutate(period = "Taper Tantrum 2013", 
+         id = row_number())
+
+glimpse(df_1)
+
+df_2 <- df %>% 
+  filter(date >= "2016-10-27" & date <= "2017-03-16") %>% 
+  mutate(period = "US Election 2016", 
+         id = row_number())
+
+glimpse(df_2)
+
+df_3 <- df %>% 
+  filter(date >= "2017-09-14" & date <= "2018-03-31") %>% 
+  mutate(period = "Recent period", 
+         id = row_number())
+
+glimpse(df_3)
+
+df_note <- data.frame(date = as.Date(c("2013-05-02", "2016-10-27", "2017-09-14")),
+                      period = c("Taper Tantrum 2013", "US Election 2016", "Recent period"),
+                      end_date = as.Date(c("2013-09-12", "2017-03-16", "2018-03-31")))
+
+glimpse(df_note)
+
+df2 <- bind_rows(df_1, df_2, df_3)
+glimpse(df2)
+
+df2 <- df2 %>% mutate(periodf = factor(period, 
+                                       levels = c("Taper Tantrum 2013", 
+                                                  "US Election 2016", "Recent period")))
+
+df_note_1 <- df_note %>% left_join(df2 %>% select(date, price, id, periodf), by = "date")
+glimpse(df_note_1)
+
+df_note_1 <- df_note_1 %>% left_join(df2 %>% select(date, price, id), by = c("end_date" = "date"))
+
+```
+
+
+```{r}
+# graph
+g1 <- df2 %>% 
+  ggplot(aes(id, price, color = periodf, fill = periodf)) +
+  geom_ribbon(aes(ymin = 3.3, ymax = price), color = NA, alpha = 0.2) +
+  geom_line(size = 1.1) +
+  scale_fill_viridis(option = "D", discrete = TRUE, end = 0.85) +
+  scale_color_viridis(option = "D", discrete = TRUE, end = 0.85) +
+  theme_minimal() +
+  scale_x_continuous(expand = c(0, 0), limits = c(1, 23)) +
+  scale_y_continuous(limits = c(3.3, 4.7), breaks = seq(3.3, 4.7, 0.2), sec.axis = dup_axis()) +
+    labs(x = "weeks since rates started rising",y="30-year fixed mortgage rates (%)",
+       title = "Recent periods of mortgage rate increases",
+       subtitle = "U.S. weekly average 30-year fixed mortgage rates (%)",
+       caption = "@lenkiefer Source: Freddie Mac Primary Mortgage Market Survey through February 1, 2018") +
+  ggrepel::geom_label_repel(data = df_note_1, inherit.aes = FALSE, fontface = "bold", size = 3,
+                            aes(x = id.y, color = periodf, label = period, y = price.y)) +
+  ggrepel::geom_label_repel(data = df_note_1, inherit.aes = FALSE, fontface = "bold", size = 3,
+                            aes(x = id.x, color = periodf, 
+                                label = paste0("Began: ", as.character(date, 
+                                                                       format = "%b %d, %Y")), 
+                                y = price.x)) +
+  theme(plot.caption = element_text(hjust = 0), 
+        legend.position = "none", 
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(face = "italic", size = 14),
+        strip.text = element_text(face = "bold", size = 20)) 
+
+g1
+
+```
+
+
+
+recent period - time series plot
+
+```{r}
+g2 <- df %>% 
+  ggplot(aes(date, price)) +
+  geom_line(color = "darkgrey", inherit.aes = FALSE, 
+            aes(date, price)) +
+  theme_minimal() +
+  scale_y_continuous(limits = c(3.3, 4.7), breaks = seq(3.3, 4.7, 0.2), 
+                     sec.axis = dup_axis()) +
+  scale_fill_viridis(option = "D", discrete = TRUE, end = 0.85) +
+  scale_color_viridis(option = "D", discrete = TRUE, end = 0.85) +
+  labs(x = "", y = "30-year fixed mortgage rates (%)", 
+       title = "Recent periods of mortgage rate increases", 
+       subtitle = "US weekly avg. 30-year fixed mortgage rates (%)", 
+       caption = "@lenkiefer, Source: Freddie Mac Primary Mortgage Market Survey through Feb. 1, 2018") +
+  theme(plot.caption = element_text(hjust = 0), 
+        legend.position = "none", 
+        plot.title = element_text(face = "bold", size = 18), 
+        plot.subtitle = element_text(face = "bold", size = 14), 
+        strip.text = element_text(face = "bold", size = 14))
+
+
+g2
+
+```
+
+"eyeball" econometrics >>> 3 distinct periods of rate increases!
+
+```{r}
+g3 <- 
+  df2 %>% 
+  ggplot(aes(date, price, color = periodf, fill = periodf)) +
+  geom_line(data = df %>% mutate(id = row_number()), color = "darkgray", inherit.aes = FALSE,
+            aes(date, price)) +
+  geom_ribbon(aes(ymin = 3.3, ymax = price), color = NA, alpha = 0.2) + 
+  geom_line(size = 1.1) +
+  scale_fill_viridis(option = "D", discrete = TRUE, end = 0.85) +
+  scale_color_viridis(option = "D", discrete = TRUE, end = 0.85) +
+  theme_minimal() +
+  geom_label(data = df_note_1, inherit.aes = FALSE, fontface = "bold", size = 3,
+             aes(end_date, color = periodf, label = period, y = price.y), 
+             hjust = 1, nudge_y = 0.05) +
+  scale_y_continuous(limits = c(3.3, 4.7), breaks = seq(3.3, 4.7, 0.2), sec.axis = dup_axis()) +
+  labs(x = "", y = "30-year fixed mortgage rates (%)",
+       title = "Recent periods of mortgage rate increases",
+       subtitle = "U.S. weekly average 30-year fixed mortgage rates (%)",
+       caption = "@lenkiefer Source: Freddie Mac Primary Mortgage Market Survey through February 1, 2018") +
+  theme(plot.caption = element_text(hjust = 0), 
+        legend.position = "none",
+        plot.title = element_text(face = "bold", size = 18), 
+        plot.subtitle = element_text(face = "bold", size = 14), 
+        strip.text = element_text(face = "bold", size = 14))
+  
+g3
+
+```
+
+ow use small multiples to take closer look at above! 
+
+```{r}
+g4 <- df2 %>% 
+  ggplot(aes(x=id,y=price, color=periodf,fill=periodf))+
+  geom_ribbon(aes(ymin=3.3,ymax=price),color=NA,alpha=0.2)+
+  geom_line(size=1.1)+
+  scale_fill_viridis(option="D",discrete=T,end=0.85)+
+  scale_color_viridis(option="D",discrete=T,end=0.85)+
+  theme_minimal()+
+  scale_x_continuous(expand=c(0,0),limits=c(1,23))+
+  ggrepel::geom_label_repel(data=df_note_1, inherit.aes=F, fontface="bold",size=3,
+                            aes(x=id.y,color=periodf, label=paste0(as.character(end_date,format="%b %d,%Y"),": ",price.y),y=price.y))+
+  ggrepel::geom_label_repel(data=df_note_1, inherit.aes=F, fontface="bold",size=3,
+                            aes(x=id.x,color=periodf, label=paste0(as.character(date,format="%b %d,%Y"),": ",price.x),y=price.x))+
+  scale_y_continuous(limits=c(3.3,4.7),breaks=seq(3.3,4.7,.2),sec.axis=dup_axis())+
+  labs(x="weeks since rates started rising",y="30-year fixed mortgage rates (%)",
+       title="Recent periods of mortgage rate increases",
+       subtitle="U.S. weekly average 30-year fixed mortgage rates (%)",
+       caption="@lenkiefer Source: Freddie Mac Primary Mortgage Market Survey through February 1, 2018")+
+  theme(plot.caption=element_text(hjust=0),legend.position="none",
+        plot.title=element_text(face="bold",size=18),
+        plot.subtitle=element_text(face="italic",size=14),
+        strip.text=element_text(face="bold",size=14)) +
+  facet_wrap(~periodf)
+
+g4
+
+```
+
+Arrange into single panel:
+
+```{r}
+cowplot::plot_grid(g1 + labs(caption = ""), # erase caption from g1
+                   g4 + theme(
+                     plot.title = element_blank(), 
+                     plot.subtitle = element_blank()),     # erase title/subtitle from g4
+                   ncol = 1)                           # specify 1 column
+```
+
+
+Cividis color scheme for colorblindess. `Option = "E"`
+
+```{r}
+cowplot::plot_grid(g1+labs(caption="")+ # remove caption   
+                     scale_fill_viridis(option="E",discrete=T,end=0.85)+ # use cividis color map
+                     scale_color_viridis(option="E",discrete=T,end=0.85),
+                   g4+theme(plot.title=element_blank(), plot.subtitle=element_blank())+
+                     scale_fill_viridis(option="E",discrete=T,end=0.85)+ # use cividis color map
+                     scale_color_viridis(option="E",discrete=T,end=0.85),
+                   ncol=1)
+```
+
+
+
