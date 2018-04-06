@@ -1,0 +1,95 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+2014 Winter Olympics
+
+```{r}
+library(rvest)
+library(tidyverse)
+library(stringr)
+
+Olympics_2014_wiki <- read_html("https://en.wikipedia.org/wiki/List_of_2014_Winter_Olympics_medal_winners")
+
+sports <- Olympics_2014_wiki %>% 
+  html_nodes("h2") %>% 
+  `[`(1:15) %>% 
+  html_text() %>% 
+  str_split("\\[") %>% 
+  map_chr(1)
+
+sports
+
+medals <- Olympics_2014_wiki %>% 
+  html_nodes("table") %>% 
+  `[`(3:23) %>% 
+  html_table()
+
+medals
+
+# some multiple tables for sport...
+tables_by_sport <- c(2, 3, 1, 2, 1, 1, 2, 2, 1, 1, 2, 1, 1, 2, 2) 
+
+# sport as col in each row
+
+medals_tbl <- medals %>% 
+  map(~select(.x, Gold, Silver, Bronze)) %>% 
+  map2_df(rep(sports, tables_by_sport), 
+          ~mutate(.x, sport = .y)) %>% 
+  as_data_frame()
+
+medals_tbl
+
+# country name == before IF team
+# country name == after IF individual
+
+medal_table_site <- read_html("https://en.wikipedia.org/wiki/2014_Winter_Olympics_medal_table")
+
+medal_table <- medal_table_site %>% 
+  html_nodes("table") %>% 
+  `[`(2) %>% 
+  html_table(fill = TRUE) %>% 
+  `[[`(1)
+
+countries_with_medal <- medal_table %>% 
+  pull(NOC) %>% 
+  `[`(-27)
+
+detect_country <- function(string_with_country) {
+  
+  ind <- map_lgl(countries_with_medal,
+                 ~str_detect(string_with_country, pattern = .x))
+  
+  countries_with_medal[ind]
+  
+}
+
+detect_country_vec <- function(country_vec) {
+  
+  map_chr(country_vec, detect_country)
+  
+}
+
+
+working_table <- medals_tbl %>% 
+  mutate_at(.vars = vars(Gold, Silver, Bronze), .funs = detect_country_vec)
+
+View(medals_tbl)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
