@@ -1,0 +1,167 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "January 29, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 2016 Presidential Election poll averages
+
+
+http://www.thecrosstab.com/datascience/r-1/
+
+
+```{r}
+library(dplyr)
+library(readr)
+
+polls_2016 <- read_tsv(url("http://elections.huffingtonpost.com/pollster/api/v2/questions/16-US-Pres-GE%20TrumpvClinton/poll-responses-clean.tsv"))
+
+glimpse(polls_2016)
+
+
+```
+
+1905 polls from the election
+
+subset for entire electorate
+
+```{r}
+polls_2016 <- polls_2016 %>% 
+  filter(sample_subpopulation %in% c("Adults", "Likely Voters", "Registered Voters"))
+
+# 816 polls
+
+unique(polls_2016$sample_subpopulation)
+
+```
+
+mutate date to proper format with `lubridate`
+
+```{r}
+library(lubridate)
+
+glimpse(polls_2016)
+# as date var
+
+polls_2016 <- polls_2016 %>% 
+  mutate(end_date = ymd(end_date))
+
+
+```
+
+expand data t ocover entire campaign duration
+
+>>> moving average look at apst 2 weeks of poll results, even if not exist >> set to NA
+
+```{r}
+polls_2016 <- polls_2016 %>% 
+  right_join(data.frame(
+    end_date = seq.Date(min(polls_2016$end_date), max(polls_2016$end_date), by = "days")))
+
+glimpse(polls_2016)
+
+```
+
+
+average the polls: rolling average of 14 polls over the campaign cycle over previous 2 weeks.
+
+
+first: summarize for each day where multiple olls >>> average of polls 
+
+```{r}
+polls_2016 <- polls_2016 %>% 
+  group_by(end_date) %>% 
+  summarize(Clinton = mean(Clinton), 
+            Trump = mean(Trump))
+```
+
+
+second: average polls with `rollapply()` from `zoo` package. 
+
+variable to average >>> width of units over which to average (# of days), function to apply to specified units (# of days), how often to average, NAs?, fill NAs?, window function.
+
+```{r}
+library(zoo)
+
+rolling_average <- polls_2016 %>% 
+  mutate(Clinton.Margin = Clinton - Trump, 
+         Clinton.Avg = rollapply(Clinton.Margin, width = 14, 
+                                 FUN = function(x){mean(x, na.rm = TRUE)}, 
+                                 by = 1, partial = TRUE, fill = NA, align = "right"))
+
+tail(rolling_average)
+
+```
+
+
+ggplot
+
+```{r}
+library(ggplot2)
+
+rolling_average %>% 
+  ggplot() +
+  geom_line(aes(end_date, Clinton.Avg), col = "blue") +
+  geom_point(aes(end_date, Clinton.Margin))
+
+
+
+
+```
+
+
+
+
+# Use DT
+
+```{r}
+
+library(data.table)
+pollsDT <- fread("http://elections.huffingtonpost.com/pollster/api/v2/questions/16-US-Pres-GE%20TrumpvClinton/poll-responses-clean.tsv")
+
+pollsDT <- pollsDT[sample_subpopulation %in% c("Adults", "Likely Voters", "Registered Voters"), ]
+pollsDT[, end_date := as.IDate(end_date)]
+pollsDT <- pollsDT[data.table(end_date = seq(min(pollsDT[, end_date]),
+                                  max(pollsDT[, end_date]), by = "days")), on = "end_date"]
+
+# avg. polls
+
+library(zoo)
+
+pollsDT <- pollsDT[, .(Clinton = mean(Clinton), Trump = mean(Trump)), by = end_date]
+glimpse(pollsDT)
+
+pollsDT[, Clinton.Margin := Clinton - Trump]
+glimpse(pollsDT)
+
+pollsDT[, Clinton.Avg := rollapply(Clinton.Margin, width = 14, 
+                                   FUN = function(x){mean(x, na.rm = TRUE)}, 
+                                   by = 1, partial = TRUE, fill = NA, align = "right")]
+
+glimpse(pollsDT)
+
+# plot
+library(ggplot2)
+
+pollsDT %>% 
+  ggplot() +
+  geom_line(aes(end_date, Clinton.Avg), col = "blue") +
+  geom_point(aes(end_date, Clinton.Margin))
+
+
+```
+
+
+
+
+
+
+
+
+
+

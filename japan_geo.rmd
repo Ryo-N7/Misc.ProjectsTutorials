@@ -1,0 +1,123 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "April 28, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Japan ggplot2
+
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+library(purrr)
+
+```
+
+```{r}
+# Hokkaido Prefecture shapefile
+
+sf_pref01 <- jpndistrict::jpn_pref(1, district = FALSE) %>% 
+  st_simplify(dTolerance = 0.001) %>% 
+    magrittr::set_names(c("jis_code", "prefecture", "geometry"))
+
+str(sf_pref01)[[1]]
+
+# Kanto
+
+sf_pref_kanto <- 8:14 %>% 
+  map(~jpn_pref(., district = FALSE)) %>% 
+  reduce(rbind)
+
+# Kyushu
+
+sf_pref_kyushu <- 40:47 %>% 
+  map(~jpn_pref(., district = FALSE)) %>% 
+  reduce(rbind)
+
+# Hokkaido map base:
+
+p_base <- sf_pref01 %>% 
+  ggplot() +
+  geom_sf(fill = "white") +
+  xlim(137, 149) + ylim(41, 46) +
+  theme(panel.border = element_blank(),
+        axis.title = element_blank(),
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(),
+        plot.background = element_rect(color = "black"),
+        plot.caption = element_text(size = 6)) +
+  labs(caption = "References: ____")
+
+p_base
+
+
+# Kanto map base: 
+
+k_base <- sf_pref_kanto %>% 
+  ggplot() +
+  geom_sf(fill = "lightblue")
+
+# Kyushu map base:
+
+sf_pref_kyushu %>% 
+  ggplot() +
+  geom_sf(fill = "darkred", color = "green")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(rvest)
+
+# scrape pref ISO codes
+
+url <- "https://en.wikipedia.org/wiki/Prefectures_of_Japan"
+
+pref_iso <- url %>% 
+  read_html() %>% 
+  html_nodes("table.wikitable:nth-child(48)") %>% 
+  html_table()
+
+pref_iso <- pref_iso %>% unlist %>% as_data_frame()
+
+pref_iso <- pref_iso %>% 
+  rownames_to_column()
+  #spread(key = rowname, value = value) %>% 
+  
+
+pref_iso %>% glimpse()
+
+pref_iso %>% separate(value, into = c("prefecture1", "prefecture2"), by = "\n", fill = "right")
+
+# separate()
+# use regex for each \n or No.
+
+```
+
+
+

@@ -1,0 +1,36 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "February 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+flagfillr >>> use for USA and states
+>>> use for Japan + prefectures?
+
+
+
+```{r}
+install.packages("digest")
+
+devtools::install_github("tidyverse/ggplot2")
+
+devtools::install_github("RobertMyles/flag_fillr")
+
+install.packages("rnaturalearth")
+library(rnaturalearth)
+library(flagfillr)
+
+flag_fillr_continent("Asia")
+
+country_list_states()
+
+```
+
+
