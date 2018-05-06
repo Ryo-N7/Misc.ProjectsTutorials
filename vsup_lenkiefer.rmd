@@ -107,7 +107,7 @@ I want to look at the median value of owner-occupied housing units. Estimates ar
 library(acs)
 
 api.key.install(key = "7ab09e940b5289a9a6ef7fc45f5e652572d7e363")
-
+census_api_key("7ab09e940b5289a9a6ef7fc45f5e652572d7e363")
 # state data
 geo2 <- geo.make(state = "*")
 
@@ -249,8 +249,9 @@ MAPS
 ```{r}
 # load maps
 library(tigris)
+options(tigris_use_cache = FALSE)
 
-us_geo2 <- states(cb = TRUE)
+us_geo2 <- states(cb = TRUE, refresh = TRUE, year = 2015)
 
 us_geo48 <- us_geo2[! us_geo2@data$STUSPS %in% c("AK", "PR", "VI", "HI", "GU", "MP", "AS"), ]
 
