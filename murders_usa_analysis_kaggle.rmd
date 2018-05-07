@@ -1,0 +1,358 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 7, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+https://www.kaggle.com/jonathanbouchet/historical-look-at-the-u-s-murders-type/notebook
+
+- murders by type: breakdown by year and State of the murder’s count by type: cutting, firearms, unarmed and other
+- firearm murder: details of the murder’s count by firearm: shotgun, handgun, riffle and other
+
+- The data have the State information for only Year after 2004 so I split the data at this date for the by-State study.
+
+- Other than that, we can still aggregate by Year and Type over the main dataframe.
+
+- To normalize the count by State, I will use the census data 2015 from another KAggle dataset: US Census Demographic Data
+
+- For the details by firearm, there is a small correction in the label, i.e some have a s at the end. For example: handgun and handguns which adds another category. So i just removed the s to unify the labels.
+
+
+```{r cars}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(ggthemes)
+library(RColorBrewer)
+library(cowplot)
+```
+
+read in files
+
+```{r }
+
+all_murders <- read.csv("../murders_analysis_usa/murders by type.csv", sep = ",", stringsAsFactors = FALSE)
+
+# by state information ONLY FROM 2004 >>> split data from 2004 onwards 
+
+df_1 <- all_murders %>% filter(Year >= 2004)
+df_2 <- all_murders %>% filter(Year < 2004)
+
+firearms <- read.csv("../murders_analysis_usa/Firearm Murders.csv", sep = ",", stringsAsFactors = FALSE)
+
+firearms %>% glimpse()
+
+sapply(firearms$Type, function(x) gsub('s','',x))
+
+firearms$Type %>% unique()
+
+stringr::str_replace_all(firearms$Type, "s$", " ") %>% trimws() %>% unique()
+
+firearms %>% mutate(Type = stringr::str_replace_all(Type, "s$", "")) %>% select(Type) %>% unique()
+
+firearms <- firearms %>% mutate(Type = stringr::str_replace_all(Type, "s$", ""))
+
+glimpse(firearms)
+
+```
+
+
+TIMELINE of Murders Count
+
+```{r}
+# base plot by Type
+
+basePlot <- all_murders %>% 
+  group_by(Year, Type) %>% 
+  summarize(count = n(),
+            sum = sum(By.Weapon)) %>% 
+  ggplot(aes(x = Year, y = sum, group = Type)) +
+  geom_line(aes(color = Type, group = Type), size = 1.5, alpha = 0.75) +
+  geom_point(size = 1.5) +
+  scale_color_brewer(name = "", palette = "Set1") +
+  theme_fivethirtyeight() +
+  labs(title='Murder\'s count by type',subtitle='refs [1],[2],[3],[4]:https://www.thoughtco.com/us-gun-control-timeline-3963620') +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5)) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10))
+
+# total count plot
+
+totCount <- all_murders %>% 
+  group_by(Year) %>% 
+  summarize(tot = sum(By.Weapon)) %>% 
+  ggplot(aes(Year, tot)) +
+  geom_line(size = 0.5, alpha = 0.5) +
+  geom_point(size = 0.5) +
+  theme_fivethirtyeight() +
+  theme(axis.title = element_blank(), 
+        panel.grid.major.y = element_blank(), 
+        axis.text = element_text(size = 6)) +
+  labs(subtitle = "Total Count") +
+  scale_y_continuous(breaks = scales::pretty_breaks(n = 5),
+                     limits = c(0, 25000)) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 10))
+
+
+```
+
+
+add in extra annotations! 
+
+
+```{r fig.width=12, fig.height=8, fig.align='center'}
+
+basePlot +
+  geom_curve(aes(x = 1992, xend = 1993, y = 13000, yend = 15900), 
+             curvature = 0.05, arrow = arrow(length = unit(0.02, "npc")), color = "grey30", size = 0.25) +
+  annotate("text", x = 1992, y = 12000, label = "The Brady Law, \nAssault Weapon Ban[1]", 
+           size = 4, color = "black") +
+  geom_curve(aes(x = 2000, xend = 1999, y = 11000, yend = 8500), 
+             curvature = 0.05, arrow = arrow(length = unit(0.02, "npc")), 
+             color = "grey30", size = 0.25) +
+  annotate("text", x = 2000, y = 12000, label = "Columbine High School\nMass Shooting [2]",
+           size = 4, color = "red") + 
+  geom_curve(aes(x = 2006, y = 12000, xend = 2008, yend = 9750), 
+             curvature = -0.05, arrow = arrow(length = unit(0.02, "npc")), 
+             color='gray30', size=0.25) + 
+  annotate("text", x=2006, y = 13000, 
+           label = "National Instant Criminal Background\nCheck Improvement Act[3]", 
+           size=4, colour="black") +
+  geom_curve(aes(x = 2014.75, y = 8000, xend = 2015, yend = 9400), 
+             curvature = 0.05, arrow = arrow(length = unit(0.02, "npc")), 
+             color='gray30',size=0.25) +
+  annotate("text", x=2015, y = 7000, 
+           label = "Fix Gun Checks\nAct of 2015 (H.R. 3411)[4]", 
+           size=4, colour="black") + 
+  geom_curve(aes(x = 2015, y = 12000, xend = 2015.8, yend = 11000), 
+             curvature = 0.05, arrow = arrow(length = unit(0.02, "npc")), 
+             color='gray30', size=0.25) +
+  annotate("text", x=2014.5, y = 13000, 
+           label = "Orlando, Florida\nnightclub mass shooting[5]", 
+           size=4, colour="black") + 
+  annotation_custom(ggplotGrob(totCount),
+                    xmin = 2008, xmax = 2017, ymin = 14000, ymax = 19000)
+  # place total count graph in top right corner! 
+
+```
+
+tbh I'd just remove the non-firearms line plots >>> focus is on FIREARMS.
+added more breaks on x-axis to better understand where important events occur (either that or put YEAR within the annotation text in parentheses). Mini plot of Total murders in top-corner is nice addition.
+
+
+
+facet by state: 
+
+```{r}
+df_1 %>% 
+  group_by(State, Year, Type) %>% 
+  summarize(sum = sum(By.Weapon)) %>% 
+  ggplot(aes(Year, sum, group = Type )) +
+  geom_line(aes(color = Type, group = Type), size = 1, alpha = 0.75) +
+  geom_point(size = 1) +
+  scale_color_brewer(name = "", palette = "Set1") +
+  theme_fivethirtyeight() +
+  facet_wrap(~State, ncol = 6) +
+  labs(title = 'Murder\'s count by type and State') +
+  theme(axis.text = element_text(size = 8))
+  
+  
+```
+
+
+
+Normalized MAP for 2016.
+
+```{r fig.width=12, fig.height=10, fig.align='center'}
+
+census_2015 <- read.csv("../murders_analysis_usa/acs2015_census_tract_data.csv", 
+                        sep = ",", stringsAsFactors = FALSE)
+
+us_pop_2015 <- census_2015 %>% group_by(State) %>% summarize(totPop = sum(TotalPop))
+
+us_pop_2015 %>% glimpse()
+
+states_map <- map_data("state")
+
+glimpse(states_map)
+
+states_name <- data.frame("state_name" = tolower(state.name),
+                          "state_abb" = state.abb)
+
+y2016_df <- all_murders %>% 
+  filter(Year == 2016) %>% 
+  group_by(State) %>% 
+  summarise(sum = sum(By.Weapon))
+
+res <- y2016_df %>% left_join(us_pop_2015, by = "State")
+glimpse(res)
+
+res <- res %>% 
+  mutate(count_normalized = 100 * (sum / totPop),
+         region = tolower(State)) %>% 
+  select(-State)
+  
+
+all_states_2016 <- left_join(
+  states_map, 
+  res,
+  by = "region")
+
+glimpse(res)
+glimpse(states_map)
+
+glimpse(all_states_2016)
+
+# alabama and florida missing for some weird reason
+
+g <- all_states_2016 %>% 
+  ggplot(aes(map_id = region)) +
+  geom_map(aes(fill = count_normalized), 
+           map = states_map, 
+           color = "black", size = 0.2) +
+  expand_limits(x = states_map$long, y = states_map$lat) + # IMPORTANT for map to appear within grob
+  scale_fill_gradientn(name = "", colors = viridis::viridis(10), na.value = "white") +
+  theme_fivethirtyeight() +
+  theme(panel.grid.major = element_blank(),
+        axis.text = element_blank(), 
+        axis.ticks = element_blank(), 
+        legend.position = c(0.9, 0.02),
+        legend.text = element_text(size = 7)) + 
+  labs(title = 'Percentage of the murder count normalized by State population for Y2016', 
+       subtitle = 'State population from census 2015\nbottom left histogram is the raw count distribution') +
+  coord_map(projection = "conic", lat0 = 30)
+
+
+g1 <- g +
+  annotate("text", x = -86, y = 27, 
+           label = "Alabama:\nno entry for 2016", 
+           size = 4, color = "black") +
+  annotate("segment", 
+           x = -86, xend = -87, 
+           y = 28, yend = 32, 
+           color = "black") +
+  annotate("text", x = -75, y = 27, 
+           label = "Florida: no entry\nin the dataset", 
+           size = 4, color = "black")
+
+# set histogram inside map
+gg1 <- ggdraw(g1)  # cowplot::ggdraw()
+
+hist <- y2016_df %>% 
+  ggplot(aes(sum)) +
+  geom_histogram(bins = 20) +
+  geom_vline(xintercept = median(y2016_df$sum), 
+             color = "orange", size = 1.5) +
+  annotate("text", x = 800, y = 10, 
+           label = "median value\nover all States", 
+           size = 4, color = "orange") +
+  theme_fivethirtyeight() +
+  theme(axis.text = element_text(size = 8)) +
+  labs(subtitle = "un-normalized count distribution")
+
+
+gg1 + 
+  draw_grob(ggplotGrob(hist), 
+            x = 0.01, y = 0.14, 
+            width = 0.3, height = 0.175)
+
+
+
+```
+
+
+# timeline + breakdown of murders by firearm
+
+```{r}
+
+firearms %>% 
+  group_by(Year, Type) %>% 
+  summarize(count = n(), 
+            sum = sum(By.Type)) %>% 
+  ggplot(aes(Year, sum, group = Type)) +
+  geom_line(aes(color = Type, group = Type), 
+            size = 2, alpha = 0.5) +
+  geom_point(size = 2) +
+  theme_economist() +
+  scale_color_brewer("", palette = "Set1") +
+  labs(title = "Murder\'s count by type", 
+       subtitle = "all states") +
+  facet_grid(~Type, scales = "free_y") +
+  geom_smooth(method = "loess", color = "darkred", size = 0.25, alpha = 0.15)
+
+# facet_wrap not work in dev ggplot2 so used facet_grid.......
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
