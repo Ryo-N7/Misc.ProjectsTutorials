@@ -1,0 +1,127 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(spData)
+library(sf)
+library(tmap)
+library(grid)
+
+# best projection for inset? 
+# equal area proj
+
+# reproject us_states (from spData)
+
+st_crs(us_states) # EPSG 4269
+
+us_states2163 <- us_states %>% st_transform(crs = 2163)
+
+st_crs(us_states2163) # EPSG 2163
+
+
+```
+
+Calculate scale relations between the mainland + hawaii and alaska
+-> necessary to calculate the areas of the bounding box of each object with `st_area()`
+--> then, calculate ratios
+
+```{r}
+us_states_area <- us_states2163 %>% st_bbox() %>% st_as_sfc() %>% st_area()
+hawaii_area <- hawaii %>% st_bbox() %>% st_as_sfc() %>% st_area()
+alaska_area <- alaska %>% st_bbox() %>% st_as_sfc() %>% st_area()
+
+us_states_hawaii_ratio <- as.numeric(hawaii_area / us_states_area)
+us_states_alaska_ratio <- as.numeric(alaska_area / us_states_area)
+
+
+```
+
+create individual maps for each of the objects: us-states, alaska, hawaii
+-> use `tm_layout()` to remove map frames and backgrounds
+
+```{r}
+us_states_map <- tm_shape(us_states2163) + 
+  tm_polygons() +
+  tm_layout(frame = FALSE)
+
+hawaii_map <- tm_shape(hawaii) +
+  tm_polygons() +
+  tm_layout(title = "Hawaii", 
+            frame = FALSE,
+            bg.color = NA,
+            title.position = c("left", "BOTTOM"))
+
+alaska_map <- tm_shape(alaska) +
+  tm_polygons() +
+  tm_layout(title = "Alaska", 
+            frame = FALSE,
+            bg.color = NA,
+            title.position = c("left", "TOP"))
+
+
+```
+
+# Arrange map ----
+
+use `grid` pkg to arrange map 
+
+The code below creates a new ‘page’ and specifies its layout with two rows - one smaller (for Alaska) and one larger (for the contiguous 48 states). 
+
+Each inset map is printed in its corresponding viewport, with Hawaii is printed in the bottom of the second row. 
+
+Note the use of area rations to make the size of Alaska and Hawaii roughly comparable with that of the main land. The final step draws dashed lines `(gp = gpar(lty = 2))` to separate mainland from Alaska and Hawaii.
+
+
+```{r}
+grid.newpage()
+
+pushViewport(viewport(layout = grid.layout(nrow = 2, ncol = 1, 
+                                           heights = unit(c(us_states_alaska_ratio, 1), "null"))))
+
+print(alaska_map, vp = viewport(layout.pos.row = 1))
+print(us_states_map, vp = viewport(layout.pos.row = 2))
+print(hawaii_map, vp = viewport(x = 0.25, y = 0.1, 
+                                height = us_states_hawaii_ratio))
+
+grid.lines(x = c(0, 1), y = c(0.64, 0.64), gp = gpar(lty = 2))
+grid.lines(x = c(0, 0.5), y = c(0.32, 0), gp = gpar(lty = 2))
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

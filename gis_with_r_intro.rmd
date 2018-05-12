@@ -1,0 +1,350 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+https://www.jessesadler.com/post/gis-with-r-intro/
+
+
+```{r}
+# Load the packages
+library(tidyverse)
+library(sp)
+library(sf)
+library(rnaturalearth)
+
+# Load the data
+letters <- read_csv("../correspondence-data-1585.csv")
+locations <- read_csv("../locations.csv")
+```
+
+create calculated dfs
+
+```{r}
+# letters per source
+sources <- letters %>% 
+  group_by(source) %>% 
+  count() %>% 
+  rename(place = source) %>% 
+  add_column(type = "source") %>% 
+  ungroup()
+
+# letters per destination
+destinations <- letters %>% 
+  group_by(destination) %>% 
+  count() %>% 
+  rename(place = destination) %>% 
+  add_column(type = "destination") %>% 
+  ungroup()
+
+
+
+```
+
+join together
+
+```{r}
+
+letters_data <- rbind(sources, destinations) %>% 
+  mutate(type = as_factor(type))
+
+glimpse(letters_data)
+
+```
+
+join to locations by "place"
+
+```{r}
+geo_data <- letters_data %>% left_join(locations, by = "place")
+
+glimpse(geo_data)
+
+```
+
+sp pkg
+
+CRS == WGS84
+
+```{r}
+coords <- geo_data %>% select(lon, lat)
+
+points_sp <- SpatialPoints(coords = coords, 
+                           proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+points_sp
+glimpse(points_sp)
+
+```
+
+points_sp NOT contain non-spatial data (from letters_data) >>>
+create SpatialPointsDataFrame object >>> fill data slot with letters_data
+
+```{r}
+points_spdf <- SpatialPointsDataFrame(coords = coords, 
+                                      data = letters_data, 
+                                      proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+points_spdf
+
+str(points_spdf, max.level = 2)
+
+```
+
+Access non-spatial data with `points_spdf@data` >>> inability use dplyr commands
+
+```{r}
+points_spdf[points_spdf@data$n > 10, ]
+```
+
+Grab map data
+
+```{r}
+# rnaturalearth
+
+coast_sp <- ne_coastline(scale = "medium")
+countries_sp <- ne_countries(scale = "medium")
+
+str(coast_sp, max.level = 2)
+str(countries_sp, max.level = 2)
+
+```
+
+# make sure points_spdf and the map sp dfs have SAME CRS.
+
+```{r}
+coast_sp@proj4string
+# WGS84
+
+proj4string(countries_sp)
+# WGS84
+
+proj4string(points_spdf)
+3=# WGS84
+```
+
+use base plotting for sp objects
+
+```{r}
+palette(alpha(c("darkorchid", "darkorange"), 0.7))
+
+par(mar = c(1, 1, 3, 1))
+
+plot(points_spdf, 
+     pch = 20, col = points_spdf$type,
+     cex = sqrt(points_spdf$n) / 2 + 0.25)
+
+box()
+
+title(main = "Correspondence of D. vdMeulen, 1585")
+
+```
+
+
+```{r}
+pointsize <- c(1, 50, 100)
+par(mar = c(1, 1, 3, 1))
+
+# Plot points
+plot(points_spdf,
+     pch = 20,
+     col = points_spdf$type,
+     cex = sqrt(points_spdf$n)/2 + 0.25)
+# Plot coastlines background map
+plot(coast_sp,
+     col = "black",
+     add = TRUE)
+# Add a box around the plot
+box()
+
+# Legend for colors
+legend("topright", legend = levels(points_spdf$type),
+       pt.cex = 2,
+       col = 1:2,
+       pch = 15)
+
+# legend for size of points
+legend("right", legend = pointsize,
+       pt.cex = (sqrt(pointsize)/2 + 0.25),
+       col = "black",
+       pch = 20,
+       title = "Letters")
+
+# Title for the map
+title(main = "Correspondence of Daniel van der Meulen, 1585")
+```
+
+
+to link countries with map so far >>> change bounding box to match points_spdf with `bbox()`
+
+```{r}
+countries_sp@bbox <- bbox(points_spdf)
+
+
+par(mar = c(1, 1, 3, 1))
+
+# Plot countries map and color with grays
+plot(countries_sp,
+     col = gray(0.8),
+     border = gray(0.7))
+# Plot points
+plot(points_spdf,
+     pch = 20,
+     col = points_spdf$type, 
+     cex = sqrt(points_spdf$n)/2 + 0.25,
+     add = TRUE)
+# Add a box around the plot
+box()
+
+# Legend for colors
+legend("topright",
+       legend = levels(points_spdf$type),
+       pt.cex = 2,
+       col = 1:2,
+       pch = 15)
+# legend for size of points
+legend("right",
+       legend = pointsize,
+       pt.cex = (sqrt(pointsize)/2 + 0.25),
+       col = "black",
+       pch = 20,
+       title = "Letters")
+
+# Title for the map
+title(main = "Correspondence of Daniel van der Meulen, 1585")
+
+```
+
+
+## same workflow but with sf!
+
+```{r}
+points_sf <- st_as_sf(geo_data, 
+                      coords = c("lon", "lat"),
+                      crs = 4326)
+
+class(points_sf)
+points_sf
+
+class(points_sf$geometry)
+
+# geometry of the sf object
+st_geometry(points_sf)
+
+```
+
+rnaturalearth >> create into sf with returnclass arg
+
+```{r}
+coast_sf <- ne_coastline(scale = "medium", returnclass = "sf")
+countries_sf <- ne_countries(scale = "medium", returnclass = "sf")
+
+head(coast_sf)
+
+# subset with tidyverse verbs!
+
+points_sf %>% filter(n > 10)
+
+# manipulate sf with tidyverse verbs
+countries_sf %>% 
+  filter(continent == "South America") %>% 
+  select(name) %>% 
+  st_transform(crs = "+proj=moll +datum=WGS84") %>% 
+  plot(key.pos = NULL, graticule = TRUE, main = "SA")
+
+```
+
+sf and ggplot2
+
+If you make a ggplot2 plot with points_sf and coast_sf without modifications, you will get a wold map with some small points in western Europe. There are two ways to deal with this incongruence by either changing the bounding box of the background map before making the plot or within the plot itself. As far as I know, there is no equivalent method in the sf package to the command we used above to modify the bbox slot of the countries_sp object. However, it is possible to geographically subset an sf object by a bounding box of coordinates using the ms_clip() function from the rmapshaper package. The other option is to leave coast_sf and countries_sf as they are and adjust the geographic extent of the objects in the plot command itself with the coord_sf() function and the xlim and ylim arguments. Here, I will use the latter method.
+
+There are some oddities in using geom_sf() compared to other geoms due to the character of geom_sf(). By its nature, geom_sf() is unlike other geoms in that it can be used to create points, lines, or polygons depending on the contents of the sf object. This variability results in the need to declare the geometrical object used in a show.legend argument for the legend to be properly formatted. Another difference that I have found from other geoms is that geom_sf() does not properly identify sf objects unless you explicitly identify them with data = sf_object. While these issues are something to be aware of, they do not substantively affect the the plots that we can create.
+
+
+```{r}
+ggplot() +
+  geom_sf(data = coast_sf) +
+  geom_sf(data = points_sf, 
+          aes(color = type, size = n), 
+          alpha = 0.7, 
+          show.legend = "point") +  # specify legend format
+  coord_sf(xlim = c(-1, 14), 
+           ylim = c(44, 55))
+```
+
+On the other hand, it is possible to add information to the plot by labeling the points with geom_text_repel() from the ggrepel package, which will ensure that the labels for the points do not overlap. geom_text_repel() does not work with sf objects, but because we have made no geographic transformations to the data, we can use the data from the locations data frame to map the names of the locations to the longitude and latitude values.
+
+```{r}
+library(ggrepel)
+
+ggplot() +
+  geom_sf(data = coast_sf) +
+  geom_sf(data = points_sf,
+          aes(color = type, size = n), 
+          alpha = 0.7, 
+          show.legend = "point") +
+  coord_sf(xlim = c(-1, 14), ylim = c(44, 55),
+           datum = NA) + # remove graticules (the coord lines thingys)
+  labs(title = "Correspondence of Daniel van der Meulen, 1585",
+       size = "Letters",
+       color = "Type",
+       x = NULL,
+       y = NULL) +
+  guides(color = guide_legend(override.aes = list(size = 6))) +
+  theme_minimal()
+
+
+```
+
+fill in land, use countries_sf for borders
+
+```{r}
+ggplot() +
+  geom_sf(data = countries_sf,
+          fill = gray(0.8), 
+          color = gray(0.7)) +
+  geom_sf(data = points_sf,
+          aes(color = type, size = n), 
+          alpha = 0.7, 
+          show.legend = "point") +
+  coord_sf(xlim = c(-1, 14), ylim = c(44, 55),
+           datum = NA) + # remove graticules (the coord lines thingys)
+  labs(title = "Correspondence of Daniel van der Meulen, 1585",
+       size = "Letters",
+       color = "Type",
+       x = NULL,
+       y = NULL) +
+  guides(color = guide_legend(override.aes = list(size = 6))) +
+  theme_bw()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

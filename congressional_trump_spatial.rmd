@@ -1,0 +1,221 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 12, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+https://www.azavea.com/blog/2017/08/30/spatial-analysis-pipelines-in-r-with-simple-features/
+
+FIveThrirtyEight >>> COngress voting Trump
++ 
+shapefile of legislative districts from US Census Bureau
+
+```{r}
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(magrittr)
+
+cd <- st_read("../congressional_districts.shp", stringsAsFactors = FALSE)
+
+head(cd)
+
+plot(cd)
+
+```
+
+
+load voting dataset
+
+```{r}
+cts <- read.csv("../congressional_trump_scores.csv", 
+                stringsAsFactors = FALSE)[, -1] %>% 
+  mutate(district = as.character(district))
+
+glimpse(cts)
+
+
+
+```
+
+summary statistics already provided by FiveThirtyEight. 
+->>> represent each Representative track record of voting relative to Trump's position on issue 
+->>> "Trump Score": proportion of time each legislator voted in line with the president.
+
+JOIN voting data with district polygons.
+
+```{r}
+class(cd) # sf + data.frame
+class(cts) # data.frame
+
+dat <- cd %>% left_join(cts)
+
+class(dat) # sf + data.frame! 
+
+```
+
+map theme
+
+```{r}
+mapTheme <- function() {
+  theme_void() + 
+    theme(
+      text = element_text(size = 7),
+      plot.title = element_text(size = 11, color = "#1c5074", 
+                                hjust = 0, vjust = 2, face = "bold"), 
+      plot.subtitle = element_text(size = 8, color = "#3474A2", 
+                                   hjust = 0, vjust = 0),
+      axis.ticks = element_blank(), 
+      legend.direction = "vertical", 
+      legend.position = "right",
+      plot.margin = margin(1, 1, 1, 1, 'cm'),
+      legend.key.height = unit(1, "cm"), 
+      legend.key.width = unit(0.2, "cm")
+    ) 
+}
+
+```
+
+first plot!
+
+```{r}
+dat %>% 
+  ggplot() +
+  geom_sf(aes(fill = trump_score), color = NA) +
+  coord_sf(crs = st_crs(102003)) +
+  scale_fill_gradient2("Trump Score \n", 
+                       low = "#0099ff", mid = "#ffffff", high = "#ff6666",
+                       midpoint = 0.5) +
+  labs(
+    title = 'Where have U.S. Representatives voted with and against President Trump?',
+    subtitle = "Mapping FiveThirtyEight's 'Trump Score' of House of Representative's voting records",
+    caption = "Source: Azavea, Data: FiveThirtyEight"
+  ) +
+  mapTheme()
+```
+
+EXTREME ends of spectrum == partisanship of congress!
+
+Zoom in on Upper MidWest states (Minnesota, Wisconsin, Iowa)!
+
+
+```{r}
+
+upper_mw <- dat %>% 
+  filter(state %in% c("MN", "IA", "WI")) %>% 
+  st_transform(2289)
+
+glimpse(upper_mw)
+
+upper_mw_coords <- upper_mw %>% 
+  st_centroid() %>%   # find centroids
+  st_coordinates()    # extract coordinates as matrix
+
+# find centroids for placement of labels!
+
+upper_mw$long <- upper_mw_coords[, 1]
+upper_mw$lat <- upper_mw_coords[, 2]
+
+library(ggrepel)
+
+upper_mw %>% 
+  ggplot() +
+  geom_sf(aes(fill = trump_score), color = "white") +
+  coord_sf(datum = NA) +
+  scale_fill_gradient2("Trump Score \n", 
+                       low = "#0099ff", mid = "#ffffff", high = "#ff6666",
+                       midpoint = 0.5) +
+  geom_label(aes(long, lat, label = name, color = party),  
+             alpha = 0.75, size = 2, inherit.aes = FALSE) +
+  scale_color_manual("Political Party", 
+                     values = c("Blue", "Red"),
+                     guide = guide_legend(
+                       override.aes = list(
+                         shape = c(1, 1)))) +
+  labs(
+    title = "Congressional support for President Trump's policies in the Upper Midwest",
+    subtitle = "Mapping FiveThirtyEight's 'Trump Score' of House of Representative's voting records",
+    caption = "Source: Azavea, Data: FiveThirtyEight"
+  ) +
+  mapTheme() +
+  guides(label = guide_legend(override.aes = list(shape = c(14, 1))))
+  
+
+
+```
+
+- use `geom_text_repel()` for overlapping text lables 
+- fix the goddamn legend for political party !!!!!
+
+Aggregate original map >>> state-level! 
+
+```{r}
+by_state <- dat %>% 
+  group_by(state) %>% 
+  summarize(avg_trump_score = mean(na.omit(trump_score)),
+            districts = n_distinct(district))
+
+head(by_state)
+
+```
+
+
+plot ! 
+
+```{r}
+by_state %>% 
+  ggplot() +
+  geom_sf(aes(fill = avg_trump_score), color = "white") +
+  scale_fill_gradient2("Average \nTrump Score \nby State \n",
+                       low = '#0099ff', 
+                       mid = '#ffffff', 
+                       high = '#ff6666', 
+                       midpoint = 0.5) +
+  coord_sf(crs = st_crs(102003), datum = NA) +
+  labs(
+    title = "Which states' congressional delegations have supported President Trump's policies?",
+    subtitle = "Mapping FiveThirtyEight's 'Trump Score' of House of Representative's voting records",
+    caption = "Source: Azavea, Data: FiveThirtyEight"
+  ) +
+  mapTheme()
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
