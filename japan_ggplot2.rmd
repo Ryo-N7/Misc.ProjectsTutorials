@@ -71,7 +71,7 @@ sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>%
     filter(city_code != 13421) %>%  # filter out the Ogasawara Islands (off the coast)
     st_union() %>% 
     as.data.frame() %>% 
-    mutate(jis_code = "13", prefecture = "?????????") %>% 
+    mutate(jis_code = "13", prefecture = "Tokyo") %>% 
     magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
     st_as_sf()
 

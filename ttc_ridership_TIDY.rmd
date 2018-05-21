@@ -1,0 +1,146 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 17, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## TTC Ridership Analysis >>> TIDY 
+
+https://sharlagelfand.netlify.com/posts/tidy-ttc/
+
+
+“TTC Ridership Analysis data set measures the first point of payment when boarding at the start of a journey using the TTC. Data includes ticket types as well as the type of vehicle.” 
+
+
+WHO WHERE WHEN all in one data set -_-
+
+```{r}
+library(xlsx)
+library(knitr)
+library(dplyr)
+library(tidyr)
+
+ttc <- read.xlsx("../1985-2017 Analysis of ridership.xlsx", sheetName = "1985-2017 ACTUALS")
+
+# Error in .jcall(row[[ir]], "Lorg/apache/poi/ss/usermodel/Cell;", "getCell", : java.lang.IllegalArgumentException: # Cell index must be >= 0
+
+# use readxl...
+library(readxl)
+ttc <- read_xlsx("../1985-2017 Analysis of ridership.xlsx")
+
+glimpse(ttc)
+
+```
+
+As expected, the first few rows are the preamble, and the first column gives the who/where/when specification. The second column of data includes both the main headings (adult) as well as sub headings (tokens, tickets, etc). All of the columns are characters, and the missing values (“N/A”) read in as strings instead of missing values.
+
+
+Replace N/A strings with NA. Convert to lowercase.
+
+```{r}
+library(naniar)
+
+ttc <- ttc %>% 
+  replace_with_na_all(condition = ~.x == "N/A") %>% 
+  mutate_all(.funs = tolower)
+
+glimpse(ttc)
+
+```
+
++ Remove first few rows of description + any row describing TOTAL (aggregations of other rows)
++ Clean up colnames with `janitor` pkg
+
+```{r}
+library(stringr)
+library(janitor)
+
+ttc <- ttc[-c(1:3), ] %>% 
+  clean_names() %>% 
+  filter(!str_detect(x_1, "total")) %>% 
+  mutate(id = row_number())
+
+glimpse(ttc)
+
+```
+
+split between WHO, WHERE, WHEN data sets.
+
++ find location (row) of where each data set starts.
+
+```{r}
+who_start <- ttc %>% 
+  filter(toronto_transit_commission == "who") %>% 
+  pull(id) # row 2
+
+where_start <- ttc %>% 
+  filter(toronto_transit_commission == "where") %>% 
+  pull(id) # row 34
+
+when_start <- ttc %>% 
+  filter(toronto_transit_commission == "when") %>% 
+  pull(id) # row 41
+
+ttc_who <- ttc[who_start:(where_start - 1), -1]
+
+
+ttc_who <- ttc_who %>%
+  mutate(id = row_number())
+
+adult_start <- ttc_who %>%
+  filter(x_1 == "adult") %>%
+  pull(id)
+
+senior_student_start <- ttc_who %>%
+  filter(x_1 == "senior/student") %>%
+  pull(id)
+
+children_start <- ttc_who %>%
+  filter(x_1 == "children") %>%
+  pull(id)
+
+remaining_start <- ttc_who %>%
+  filter(x_1 == "day/vist./other") %>%
+  pull(id)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

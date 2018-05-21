@@ -1,0 +1,242 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 21, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r}
+library(rvest)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(stringr)
+library(jpndistrict)
+
+url <- "https://en.wikipedia.org/wiki/Prefectures_of_Japan"
+
+prefectures_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("table.wikitable:nth-child(51)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+#table.wikitable:nth-child(51)
+
+glimpse(prefectures_raw)
+
+# write.csv(prefectures_raw, "prefectures_raw.csv")
+```
+
+# tidy
+
+```{r}
+# clean names, fix ISO for when joinin with geo data
+prefectures_df <- prefectures_raw %>% 
+  select(-Kanji, -Distr., -Municip.) %>% 
+  janitor::clean_names() %>% 
+  mutate(iso = str_replace(iso, "JP-", "") %>% 
+           str_replace("(?<![0-9])0+", ""))
+
+# area == km^2, density == per km^2
+# fix numeric data
+
+prefectures_df %>% select('population¹') # gotta delete those superscripts first!
+
+n <- prefectures_df %>% names()
+n <- n %>% str_replace_all("\\p{No}", "")
+
+# n %>% str_replace("/[\u2070-\u209f\u00b0-\u00be]+/g", "++")
+# n %>% str_replace("<sup.*?sup>", "++")
+# n %>% str_replace_all("/\p{No}/gu/", "")
+
+prefectures_df <- prefectures_df %>% 
+  set_names(n) %>% 
+  mutate(population = str_replace_all(population, ",", "") %>% as.numeric(),
+         area = str_replace_all(area, ",", "") %>% as.numeric(),
+         density = str_replace_all(density, ",", "") %>% as.numeric()) %>% 
+  as_tibble()
+
+glimpse(prefectures_df)
+class(prefectures_df)
+
+```
+
+
+
+
+## Combine with geometry data
+
+
+```{r}
+jpnprefs
+
+sf_ja <- 1:46 %>% magrittr::extract(-13) %>%    # dont include Okinawa (47)
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>% 
+    st_simplify(dTolerance = 0.01) %>% 
+    mutate(city_code = as.numeric(city_code)) %>% 
+    filter(city_code != 13421) %>%  # filter out the Ogasawara Islands (off the coast)
+    st_union() %>% 
+    as.data.frame() %>% 
+    mutate(jis_code = "13", prefecture = "Tokyo") %>% 
+    magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
+    st_as_sf()
+
+class(sf_pref13)
+class(sf_ja)
+plot(sf_ja)
+
+reduce(rbind, sf_ja, sf_pref13)
+sf_ja2 <- sf_ja %>% rbind(sf_pref13)
+
+
+# combine with pref df
+pref_sf <- sf_ja2 %>% 
+  select(-prefecture) %>% 
+  right_join(prefectures_df, by = c("jis_code" = "iso")) %>% 
+  mutate(jis_code = as.numeric(jis_code))
+
+glimpse(pref_sf)
+
+pref_sf %>% filter(jis_code == 13) %>% plot()
+
+```
+
+
+```{r}
+##############
+library(cartogram)
+# convert to sp
+class(pref_sf)
+
+st_crs(pref_sf)
+
+pref_sf <- st_transform(pref_sf, crs = 2163)
+
+pref_SP <- as(st_sfc(pref_sf), "Spatial")
+
+jpn_cartogram <- nc_cartogram(pref_sf, weight = "population", k = 0.5)
+
+##############
+
+```
+
+
+```{r}
+library(readxl)
+starbucks_raw <- read_excel("../tidy_tuesday/may_7_week_6/week6_coffee_chains.xlsx", sheet = 1)
+
+starbucks_jpn <- starbucks_raw %>% 
+  janitor::clean_names() %>% 
+  select(brand, city, state_province, country, longitude, latitude) %>% 
+  filter(country == "JP") %>% 
+  group_by(state_province) %>% 
+  summarize(count = n()) %>% 
+  ungroup() %>% 
+  mutate(state_province = as.numeric(state_province))
+
+glimpse(starbucks_jpn)
+
+starb_jp2 <- pref_sf %>% 
+  left_join(starbucks_jpn, by = c("jis_code" = "state_province"))
+
+class(starb_jp2)
+
+jpn_sf <- as(sf_ja2, "Spatial")
+
+jpn_sf@data <- jpn_sf@data %>% 
+  merge(prefectures_df, by.x = "jis_code", by.y = "iso") %>% 
+  select(-prefecture.x, prefecture = prefecture.y, -area_code)
+
+jpn_sf@data <- jpn_sf@data %>% 
+  merge(starbucks_jpn, by.x = "jis_code", by.y = "state_province")
+
+jpn_2carto <- nc_cartogram(jpn_sf, weight = "population")
+
+greenpal <- c('#edf8e9','#bae4b3','#74c476','#31a354','#006d2c')
+
+# add "jenks" process for better interval categories (California and Texas are still their own categories but best I can do with big outliers)
+# legend.reverse for HIGH values on TOP, slight sepia to offset white glare?
+# fiddle with margins to fit legend and small title
+# plot!
+jpn_cartogram <- tm_shape(jpn_2carto) + 
+  tm_borders("grey10") +
+  tm_fill(title = "", "count", 
+          palette = greenpal, 
+          #style = "kmeans",
+          legend.reverse = TRUE) +
+  tm_layout(inner.margins = c(.04,.02, .08, .02),
+            main.title = "Number of Starbucks per 100,000 people",
+            title = "(Source: https://www.kaggle.com/starbucks/store-locations)\nState size by total population",
+            title.position = c("center", "top"), title.size = 0.7,
+            fontfamily = "Garamond", fontface = "bold",
+            legend.text.size = 0.85, 
+            sepia.intensity = 0.1)
+
+```
+
+
+
+
+```{r}
+jpn_sf <- as(sf_ja, "Spatial")
+jpn_sf <- as(sf_ja2, "Spatial")
+
+
+jpn_sf@data <- jpn_sf@data %>% 
+  merge(prefectures_df, by.x = "jis_code", by.y = "iso") %>% 
+  select(-prefecture.x, prefecture = prefecture.y, -area_code)
+
+jpn_sf %>% str(list.len = 2)
+
+jpn_2carto <- nc_cartogram(jpn_sf, weight = "population")
+
+
+library(tmap)
+
+# Sequential single hue color palette :: http://colorbrewer2.org/#type=sequential&scheme=Greens&n=5
+greenpal <- c('#edf8e9','#bae4b3','#74c476','#31a354','#006d2c')
+
+# add "jenks" process for better interval categories (California and Texas are still their own categories but best I can do with big outliers)
+# legend.reverse for HIGH values on TOP, slight sepia to offset white glare?
+# fiddle with margins to fit legend and small title
+# plot!
+jpn_cartogram <- tm_shape(jpn_2carto) + 
+  tm_borders("grey10") +
+  tm_fill(title = "", "density", 
+          palette = greenpal, 
+          #style = "kmeans",
+          legend.reverse = TRUE) +
+  tm_layout(inner.margins = c(.04,.02, .08, .02),
+            main.title = "Number of Starbucks per 100,000 people",
+            title = "(Source: https://www.kaggle.com/starbucks/store-locations)\nState size by total population",
+            title.position = c("center", "top"), title.size = 0.7,
+            fontfamily = "Garamond", fontface = "bold",
+            legend.text.size = 0.85, 
+            sepia.intensity = 0.1)
+
+# do starbucks with this one too?
+
+
+```
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,130 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 19, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+library(rvest)
+library(dplyr)
+library(ggplot2)
+library(scales)
+library(stringr)
+
+url <- "https://en.wikipedia.org/wiki/Special_wards_of_Tokyo"
+
+tokyo_wards_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("table.wikitable:nth-child(32)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+```
+
+Manipulate to tidy
+
+```{r}
+tokyo_wards_raw %>% 
+  mutate(pop = "Population\n(as of October 2016[update])" %>% as.numeric())
+
+names(tokyo_wards_raw)
+
+tokyo_wards_raw %>% 
+  janitor::clean_names() %>% 
+  mutate(pop = population_as_of_october_2016_update %>% 
+           str_replace("(?<![0-9])0+", "") %>%           # replace zeros preceding the number
+           str_replace_all(",", "") %>%                  # take out commas >> else NAs when as.numeric()
+           as.numeric()) %>%                             # turn into numeric
+  select(name, pop)
+
+# regex :: "(?<![0-9])0+"   OR "(^|[^0-9])0+"
+
+tokyo_wards_df <- tokyo_wards_raw %>% 
+  janitor::clean_names() %>% 
+  mutate(pop = population_as_of_october_2016_update %>% 
+           str_replace("(?<![0-9])0+", "") %>%           # replace zeros preceding the number
+           str_replace_all(",", "") %>%                  # take out commas >> else NAs when as.numeric()
+           as.numeric()) %>% 
+  select(-population_as_of_october_2016_update, -flag, -no, -kanji)
+
+glimpse(tokyo_wards_df)
+
+
+tokyo_wards_df <- tokyo_wards_df %>% 
+  filter(name != "Overall") %>% 
+  mutate(median_pop = median(pop),
+         ratio_pop = pop / median_pop) %>% 
+  select(name, pop, median_pop, ratio_pop, area_km2, density_km2, major_districts) %>% 
+  arrange(desc(ratio_pop))
+
+glimpse(tokyo_wards_df)
+
+```
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r echo=FALSE}
+# special log-10 labels from Claus Wilke
+label_log10 <- function(x) {
+  NAs <- is.na(x)
+  x[NAs] <- 1 # remove NAs
+  neg <- x < 0
+  x[neg] <- -1*x[neg] # remove negative numbers
+  zero <- x == 0
+  x[zero] <- 1 # remove zeros
+  exp <- floor(log10(x))
+  coef <- signif(x / 10^exp, 2)
+  sign_str <- ifelse(neg, "-", "")
+  zero_str <- ifelse(zero, "0", "")
+  coef_str <- ifelse(coef == 1, "", paste0(coef, " %*% "))
+  exp_str <- ifelse(zero, "", paste0("10^", exp))
+  labels <- paste0(sign_str, zero_str, coef_str, exp_str)
+  labels[NAs] <- "NULL"
+
+  parse(text = labels)
+}
+
+
+
+tokyo_wards_df %>% 
+  mutate(index = 1:n()) %>% 
+  ggplot(aes(x = index, y = ratio_pop)) +
+  geom_point() +
+  scale_x_continuous(limits = c(0.5, nrow(tokyo_wards_df) + 0.5), 
+                     expand = c(0, 0), breaks = NULL,
+                     name = "Special Wards of Tokyo, Most to least populous") +
+  scale_y_log10(breaks = c(0.01, 0.1, 1, 10, 100),
+                labels = label_log10) +
+  theme_minimal() +
+  theme(plot.margin = margin(3, 7, 3, 0))
+
+tokyo_wards_df %>% 
+  mutate(index = 1:n()) %>% 
+  ggplot(aes(x = index, y = ratio_pop)) +
+  geom_point() +
+  scale_x_continuous(limits = c(0.5, nrow(tokyo_wards_df) + 0.5), 
+                     expand = c(0, 0), breaks = NULL,
+                     name = "Special Wards of Tokyo, Most to least populous") +
+  #scale_y_log10(breaks = c(0.01, 0.1, 1, 10, 100),
+  #              labels = label_log10) +
+  scale_y_continuous(breaks = scales::pretty_breaks()) +
+  theme_minimal() +
+  theme(plot.margin = margin(3, 7, 3, 0))
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

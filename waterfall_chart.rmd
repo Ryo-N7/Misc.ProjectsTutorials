@@ -1,0 +1,202 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 14, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(lubridate)
+library(grid)
+library(gridExtra)
+
+# simulate data
+set.seed(123)
+
+data <- data.frame(date = seq(1, 372, by = 31) %>% as_date())
+
+glimpse(data)
+
+data <- data %>% 
+  mutate(new = abs(rnorm(n = 12, mean = 100, sd = 10)) %>% round(0)) %>% 
+  mutate(churn = abs(rnorm(n = 12, mean = 50, sd = 30)) %>% round(0)) %>% 
+  mutate(net = new - churn,
+         eop = cumsum(net)) %>% 
+  select(-net)
+
+glimpse(data)
+
+
+```
+
+EOP == End of Period user :: (end of previous period users) + (new users in current period) - churn users.
+
+PLOT
+
+```{r}
+# width of segment
+step <- 0.4 * (max(data$date) - min(data$date)) / (nrow(data) - 1)
+
+glimpse(step)
+
+# ymax of segment
+data <- data %>% mutate(ymax = eop + churn)
+
+glimpse(data)
+
+# ymin of segment (reshape2)
+df <- data %>% 
+  melt(id.vars = c("date", "eop", "ymax")) %>% 
+  mutate(ymin = ymax - value) %>% 
+  rename(group = variable)
+
+# ymin of segment (tidyr)
+df <- data %>% 
+  tidyr::gather(key = group, value = value, -date, -eop, -ymax) %>% 
+  mutate(ymin = ymax - value)
+
+# define xmin and xmax of segment
+# basically move the separate GROUP (new or churn) bars away from eachother instead of stacked!
+
+df <- df %>% 
+  mutate(xmin = case_when(
+    group == "new" ~ date - step, 
+    TRUE ~ date
+  )) %>% 
+  mutate(xmax = case_when(
+    group == "new" ~ date, 
+    TRUE ~ date + step
+  ))
+
+glimpse(df)
+
+
+p1 <- df %>% 
+  arrange(date) %>% 
+  ggplot() +
+  geom_rect(aes(xmin = xmin, xmax = xmax,
+                ymin = ymin, ymax = ymax, 
+                fill = group))
+
+p1
+```
+
+Colors and labels
+
+
+```{r}
+# line chart data
+df2 <- df %>% select(date, eop) %>% distinct() # distinct as there's data for NEW and CHURN
+
+p2 <- p1 +
+  geom_line(aes(date, eop), col = "dodgerblue4", size = 1) +
+  geom_point(aes(date, eop), col = "dodgerblue4", size = 2.5) +
+  geom_text(aes(date, eop, label = eop), vjust = 1.2, hjust = -0.1) +
+  scale_fill_manual(values = c("grey60", "coral2")) +
+  theme_minimal() +
+  theme(
+    axis.line = element_line(color = "gray40", size = 0.5),
+    legend.position = "top",
+    panel.grid.minor.x = element_blank(),
+    legend.title = element_blank()
+        ) +
+  scale_x_date(breaks = data$date,
+               date_labels = "%b") +
+  ggtitle("Overview of active users") +
+  labs(x = "Date", y = "# of active users")
+  
+
+# bar chart inset
+
+p3 <- df %>% 
+  mutate(value = case_when(
+    group == "churn" ~ -1 * value,
+    TRUE ~ value
+  )) %>% 
+  ggplot(aes(date, value)) +
+  geom_col(aes(fill = group)) +
+  scale_fill_manual(values = c("grey60", "coral2")) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(angle = 90),
+    axis.text.y = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  scale_x_date(breaks = data$date, 
+               date_labels = "%b")
+
+
+p3
+
+
+```
+
+
+put together
+
+```{r}
+# grid and gridextra
+grid.newpage()
+
+# pos of main waterfall chart
+pos_1 <- viewport(width = 1, height = 1, x = 0.5, y = 0.5)
+
+# pos of supplementary bar chart
+pos_2 <- viewport(width = 0.35, height = 0.25, x = 0.25, y = 0.75)
+
+print(p2, vp = pos_1)
+print(p3, vp = pos_2)
+
+```
+
+try with cowplot::grid_arrange
+
+```{r}
+library(cowplot)
+
+gg1 <- ggdraw(p2)
+
+gg1 +
+  draw_grob(ggplotGrob(p3),
+            x = 0.1, y = 0.65,
+            width = 0.35, height = 0.25)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

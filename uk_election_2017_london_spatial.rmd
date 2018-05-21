@@ -1,0 +1,163 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+https://www.cultureofinsight.com/blog/2018/05/02/2018-04-08-multivariate-dot-density-maps-in-r-with-sf-ggplot2/
+
+UK Election 2017 >>> LONDON
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(readr)
+extrafont::loadfonts("win")
+
+
+```
+
+load data
+
+```{r}
+# election results
+ge_data <- read_csv("http://researchbriefings.files.parliament.uk/documents/CBP-7979/HoC-GE2017-constituency-results.csv") %>% 
+  filter(region_name == "London") %>% 
+  select(ons_id, constituency_name, first_party, Con = con, Lab = lab, LD = ld, UKIP = ukip, Green = green)
+
+# shapefiles >>> filter only LONDON
+uk <- st_read("../uk_london_shapefiles/uk_650_wpc_2017_full_res_v1.8.shp", 
+              stringsAsFactors = FALSE, 
+              quiet = TRUE) %>% 
+  st_transform(4326) %>% 
+  filter(REGN == "London") %>% 
+  select(ons_id = PCONCODE)
+
+# merge dataframes
+
+sf_data <- uk %>% 
+  right_join(ge_data, by = "ons_id")
+
+head(sf_data)
+
+```
+
+random_round
+dataframe for dots (100 votes) for each party
+
+```{r}
+random_round <- function(x) {
+  
+  v <- as.integer(x)
+  
+  r <- x - v
+  
+  test <- runif(length(r), 0.0, 1.0)
+  
+  add <- rep(as.integer(0), length(r))
+  
+  add[r > test] <- as.integer(1)
+  
+  value <- v + add
+  
+  ifelse(is.na(value) | value < 0, 0, value)
+  
+  return(value)
+  
+}
+
+num_dots <- as.data.frame(sf_data) %>% 
+  select(Con:Green) %>% 
+  mutate_all(funs(. / 100)) %>% 
+  mutate_all(random_round)
+
+nu <- as.data.frame(sf_data) %>% 
+  select(Con:Green) %>% 
+  mutate_all(funs(. / 100))
+
+glimpse(num_dots)
+
+
+# dataframe with coordinates for each point + party
+library(purrr)
+sf_dots <- map_df(
+  names(num_dots),
+  ~ st_sample(sf_data, size = num_dots[, .x], type = "random") %>% # generate points for each polygon
+    st_cast("POINT") %>% # cast as point data
+    st_coordinates() %>% # pull out coordinates into matrix
+    as_tibble() %>% 
+    setNames(c("lon", "lat")) %>% # set col names to longitude, latitude
+    mutate(Party = .x) 
+  ) %>% 
+  slice(sample(1:n())) # bind rows + randomise order to avoid bias in plotting order
+
+
+head(sf_dots)
+
+
+```
+
+color palette and plotting :: need larger image size and adjust text/legend accordingly
+
+```{r fig.height=20, fig.width=20}
+pal <- c("Con" = "#0087DC", "Lab" = "#DC241F", "LD" = "#FCBB30", 
+         "UKIP" = "#70147A", "Green" = "#78B943")
+
+p <- ggplot() +
+  geom_sf(data = sf_data, fill = "transparent", color = "white") +
+  geom_point(data = sf_dots, aes(lon, lat, color = Party)) +
+  scale_color_manual(values = pal) +
+  coord_sf(crs = 4326, datum = NA) +
+  theme_void(base_family = "Iosevka", base_size = 48) +
+  labs(x = NULL, y = NULL,
+       title = "UK General Election 2017\n",
+       subtitle = "London Constituencies\n1 dot = 100 votes",
+       caption = "Map by Culture of Insight @PaulCampbell91 | Data Sources: House of Commons Library, Alasdair Rae") +
+  guides(color = guide_legend(override.aes = list(size = 18))) +
+  theme(legend.position = c(0.82, 1.03), 
+        legend.direction = "horizontal",
+        plot.background = element_rect(fill = "#212121", color = NA),
+        panel.background = element_rect(fill = "#212121", color = NA),
+        legend.background = element_rect(fill = "#212121", color = NA),
+        legend.key = element_rect(fill = "#212121", color = NA),
+        plot.margin = margin(1, 1, 1, 1, "cm"),
+        text = element_text(color = "white"),
+        title = element_text(color = "white"),
+        plot.title = element_text(hjust = 0.5),
+        plot.caption = element_text(size = 32)
+        )
+ 
+p
+
+
+```
+
+Compare against choropleht map 
+
+```{r}
+ggplot() +
+  geom_sf(data = sf_data, aes(fill = first_party), 
+          color = "white") +
+  scale_fill_manual(values = pal, name = "Seat Winner") +
+  coord_sf(crs = 4326, datum = NA) +
+  theme_void() +
+  theme(legend.position = c(0.8, 0.9), 
+        legend.direction = "horizontal")
+```
+
+
+What do we think is the most insightful map? Luckily we don’t have to choose one or the other, can use both! No one map will be able to give the you all the answers so I find that it’s best to combine techniques for maximum insight. The choropleth gives us a clear indication as to who won where, and the dot-density looks under the hood and gives us an idea of the count and diversity of votes within each constituency.
+
+
+
+
+
+
+
