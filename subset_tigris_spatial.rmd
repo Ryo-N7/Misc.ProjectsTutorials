@@ -1,0 +1,259 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 24, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## https://walkerke.github.io/2017/05/tigris-metros/
+
+```{r}
+library(tigris)
+library(sf)
+library(tidyverse)
+options(tigris_class = "sf")
+options(tigris_use_cache = TRUE)
+```
+
+Grab tracts for Portland, Oregon metro area.
+
+Combine with `rbind_tigris()` function!
+
+```{r}
+orwa <- rbind_tigris(
+  tracts("OR", cb = TRUE),
+  tracts("WA", cb = TRUE)
+)
+
+
+ggplot(orwa) +
+  geom_sf()
+
+```
+
+Sbuset tracts by locating boundary of Portland metro area >>> available in `core_based_statistical_areas()` function. Find "Portland-Vancouver" string in dataset.
+
+```{r}
+cb <- core_based_statistical_areas(cb = TRUE)
+
+glimpse(cb)
+
+pdx <- cb %>% filter(str_detect(NAME, "Portland-Vancouver"))
+
+lax <- cb %>% filter(str_detect(NAME, "Los Angeles-Long Beach-Anaheim, CA"))
+
+ggplot(pdx) + geom_sf()
+ggplot(lax) + geom_sf()
+
+```
+
+Spatial subsetting by indexing data 
+
+```{r}
+p1 <- orwa[pdx, ]
+
+ggplot() +
+  geom_sf(data = p1) +
+  geom_sf(data = pdx, fill = NA, color = "darkred")
+
+```
+
+Returned tracts within metro area but ALSO areas outside that touch metro area boundary. 
+
+Use `st_within()` to ID tracts WITHIN boundary of the metro area.
+
+```{r}
+w1 <- orwa %>% st_within(pdx)
+
+print(length(w1))
+print(w1[1:5])
+```
+
+`w1` is LIST with same length as `orwa`. Values == 0 for NOT within metro or 1 == WITHIN  metro area.
+
+Use `map_lgl()` to convert to logical vector and subset according to vector.
+
+```{r}
+w2 <- 
+  map_lgl(w1, function(x) {
+    
+    if (length(x) == 1) {
+      return(TRUE)
+    } else {
+      return(FALSE)
+    }
+  }) 
+
+# w2 == length of w1 and orwa
+
+p2 <- orwa[w2, ]
+
+ggplot() +
+  geom_sf(data = p2) +
+  geom_sf(data = pdx, fill = NA, color = "red")
+
+
+```
+
+Custom function for OTHER metro areas.
+
+1. Metro area as INPUT. Detect states wherein metro are located.
+2. Retrieve tracts from states.
+3. IDs tracts located WITHIN metro area boundary.
+
+
+```{r}
+metro_tracts <- function(metro_name) {
+  
+  # ID which states intersect metro area with `states()` function
+  st <- states(cb = TRUE)
+  
+  cb <- core_based_statistical_areas(cb = TRUE)
+  
+  metro <- cb %>% filter(str_detect(NAME, metro_name))
+  
+  stcodes <- st[metro,]$STATEFP
+  
+  
+  # fetch tracts, use `rbind_tigris()` for more than one state
+  if (length(stcodes) > 1) {
+    
+    tr <- rbind_tigris(
+      map(stcodes, function(x) {
+        tracts(x, cb = TRUE)
+      })
+    )
+  } else {
+    tr <- tracts(x, cb = TRUE)
+  }
+  
+  
+  # find tracts within metro area
+  within <- st_within(tr, metro)
+  
+  within_lgl <- map_lgl(within, function(x) {
+    if(length(x) == 1) {
+      return(TRUE)
+    } else {
+      return(FALSE)
+    }
+  })
+
+  # output subset return
+  output <- tr[within_lgl, ]
+  
+  return(output)
+}
+
+# must be valid name within "cb"
+la <- metro_tracts("los angeles")   # object 'x' NOT FOUND
+la <- metro_tracts("Los Angeles")
+
+chi <- metro_tracts("Chicago")
+sf <- metro_tracts("San Francisco")
+
+```
+
+
+```{r}
+metro_tracts <- function(metro_name) {
+  
+  # First, identify which states intersect the metro area using the
+  # `states` function in tigris
+  st <- states(cb = TRUE)
+  cb <- core_based_statistical_areas(cb = TRUE)
+  metro <- filter(cb, grepl(metro_name, NAME))
+  
+  stcodes <- st[metro,]$STATEFP
+  
+  # Then, fetch the tracts, using rbind_tigris if there is more
+  # than one state
+  if (length(stcodes) > 1) {
+    tr <- rbind_tigris(
+      map(stcodes, function(x) {
+        tracts(x, cb = TRUE)
+      })
+    )
+  } else {
+    tr <- tracts(x, cb = TRUE)
+  }
+  
+  # Now, find out which tracts are within the metro area
+  within <- st_within(tr, metro)
+  
+  within_lgl <- map_lgl(within, function(x) {
+    if (length(x) == 1) {
+      return(TRUE)
+    } else {
+      return(FALSE)
+    }
+  })
+  
+  # Finally, subset and return the output
+  output <- tr[within_lgl,]
+  
+  return(output)
+  
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

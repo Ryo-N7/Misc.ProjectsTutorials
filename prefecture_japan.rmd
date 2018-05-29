@@ -20,6 +20,9 @@ library(ggplot2)
 library(scales)
 library(stringr)
 library(jpndistrict)
+library(purrr)
+library(sp)
+library(sf)
 
 url <- "https://en.wikipedia.org/wiki/Prefectures_of_Japan"
 
@@ -34,6 +37,7 @@ prefectures_raw <- url %>%
 glimpse(prefectures_raw)
 
 # write.csv(prefectures_raw, "prefectures_raw.csv")
+prefectures_raw <- read.csv("prefectures_raw.csv")
 ```
 
 # tidy
@@ -62,8 +66,7 @@ prefectures_df <- prefectures_df %>%
   set_names(n) %>% 
   mutate(population = str_replace_all(population, ",", "") %>% as.numeric(),
          area = str_replace_all(area, ",", "") %>% as.numeric(),
-         density = str_replace_all(density, ",", "") %>% as.numeric()) %>% 
-  as_tibble()
+         density = str_replace_all(density, ",", "") %>% as.numeric())
 
 glimpse(prefectures_df)
 class(prefectures_df)
@@ -84,15 +87,30 @@ sf_ja <- 1:46 %>% magrittr::extract(-13) %>%    # dont include Okinawa (47)
     reduce(rbind) %>% 
     st_simplify(dTolerance = 0.01)
 
-sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>% 
+###
+# Tokyo Prefecture ISLANDS
+
+j_j <- jpn_pref(pref_code = 13, district = TRUE) %>% 
     st_simplify(dTolerance = 0.01) %>% 
+    mutate(city_code = as.numeric(city_code))
+
+# last 9 listed are islands
+tokyo_islands <- j_j %>% tail(9) %>% pull(city_code)
+
+###
+
+
+sf_pref13 <- jpn_pref(pref_code = 13, district = TRUE) %>% 
+    #st_simplify(dTolerance = 0.01) %>% 
     mutate(city_code = as.numeric(city_code)) %>% 
-    filter(city_code != 13421) %>%  # filter out the Ogasawara Islands (off the coast)
+    filter(!city_code %in% tokyo_islands) %>%  # filter out the Ogasawara Islands (off the coast) and other islands
     st_union() %>% 
     as.data.frame() %>% 
     mutate(jis_code = "13", prefecture = "Tokyo") %>% 
     magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
     st_as_sf()
+
+plot(sf_pref13)
 
 class(sf_pref13)
 class(sf_ja)
@@ -110,7 +128,14 @@ pref_sf <- sf_ja2 %>%
 
 glimpse(pref_sf)
 
-pref_sf %>% filter(jis_code == 13) %>% plot()
+pref_sf %>% filter(jis_code == 13) %>% select(population) %>%  plot()
+
+tm_shape(pref_sf) +
+  tm_borders("grey") +
+  tm_fill("population", palette = greenpal)
+
+ggplot(pref_sf) +
+  geom_sf(aes(fill = population))
 
 ```
 
@@ -163,6 +188,7 @@ jpn_sf@data <- jpn_sf@data %>%
 jpn_sf@data <- jpn_sf@data %>% 
   merge(starbucks_jpn, by.x = "jis_code", by.y = "state_province")
 
+library(cartogram)
 jpn_2carto <- nc_cartogram(jpn_sf, weight = "population")
 
 greenpal <- c('#edf8e9','#bae4b3','#74c476','#31a354','#006d2c')
@@ -171,6 +197,8 @@ greenpal <- c('#edf8e9','#bae4b3','#74c476','#31a354','#006d2c')
 # legend.reverse for HIGH values on TOP, slight sepia to offset white glare?
 # fiddle with margins to fit legend and small title
 # plot!
+library(tmap)
+
 jpn_cartogram <- tm_shape(jpn_2carto) + 
   tm_borders("grey10") +
   tm_fill(title = "", "count", 

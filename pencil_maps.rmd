@@ -1,0 +1,213 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 28, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Colored Pencil Map :: cartography package
+
+https://rgeomatic.hypotheses.org/1333
+
+
+```{r}
+library(cartography)
+library(sf)
+library(dplyr)
+
+mtq <- st_read(system.file("shape/martinique.shp", package = "cartography"))
+
+glimpse(mtq)
+
+plot(st_geometry(mtq), col = 1:8)
+
+
+```
+
+To turn into PencilLayer need to change polygon layer into multilinestring layer.
+
+```{r}
+mtq_pencil <- getPencilLayer(x = mtq)
+
+plot(st_geometry(mtq_pencil), col = 1:8)
+# add in the borders again
+plot(st_geometry(mtq), col = NA, add = TRUE)
+
+
+```
+
+`getPencilLayer()` creates MULTILINGSTRING sf dataframe. Keeps original data. Use with other mapping functions!
+
+```{r}
+# proportion of population == Farmers
+mtq$shareCS1 <- 100 * mtq$C13_CS1 / mtq$C13_POP
+
+mtq_pencil <- getPencilLayer(mtq, size = 500, lefthanded = TRUE)
+
+choroLayer(x = mtq_pencil, var = "shareCS1", 
+           method = "quantile", nclass = 4, lwd = .7, 
+           legend.values.rnd = 2, legend.pos = "topright",
+           legend.title.txt = "Share of \nthe population\nworking in\nagriculture (%)")
+# add boundaries
+plot(st_geometry(mtq), lwd = 0.5, add = TRUE)
+# add title + footnote
+layoutLayer(title = "Farmers in Martinique, 2013",
+            scale = 5, col = "white", coltitle = "blue",
+            author = "cartography Vers. 2.1.1", 
+            sources = "INSEE, 2016")
+
+
+
+
+```
+
+
+
+# Example with custom font, scale bar, north arrow, background img.
+https://gist.github.com/rCarto/ab7e3d188693b094f0158f8df3cc24ec
+
+
+```{r}
+library(cartography)
+library(sf)
+library(png)
+
+# load background img file
+if (!file.exists("background.png")) {
+  githubURL <- "https://raw.githubusercontent.com/gadenbuie/ggpomological/master/inst/images/pomological_background.png"
+  download.file(githubURL, "background.png")
+}
+
+img <- readPNG("background.png")
+
+
+```
+
+import Martinique communes df
+
+```{r}
+mtq <- st_read(system.file("shape/martinique.shp", package = "cartography"))
+
+# compute compond annual growth rate
+
+mtq <- mtq %>% mutate(
+  cagr = ( ( (P13_POP / P08_POP)^(1/4)) - 1) * 100
+)
+
+# color palette 
+cols <- carto.pal(pal1 = "blue.pal", n1 = 3, pal2 = "wine.pal", n2 = 2)
+
+mtq_pencil <- getPencilLayer(mtq, size = 500, lefthanded = FALSE)
+
+# export 
+png("figfig.png", width = 474, height = 577, res = 130, bg = NA)
+# set margins + font 
+par(family = "xkcd", mar = c(0, 0, 1.2, 0))
+
+# plot background img
+plot(st_geometry(mtq), col = NA, border = NA) 
+rasterImage(img, par()$usr[1], par()$usr[3], par()$usr[2], par()$usr[4])
+
+choroLayer(x = mtq_pencil, var = "cagr", breaks = c(-6.14, -2, -1, 0, 1, 2), 
+           col = cols, lwd = 0.7, add = TRUE,
+           legend.pos = "topright", legend.values.rnd = 2, 
+           legend.title.txt = "Compound annual growth rate",
+           border = "grey")
+
+plot(st_geometry(mtq), lwd = 0.5, border = "grey20", add = TRUE, lty = 3)
+
+labelLayer(x = mtq[mtq$STATUT != "Commune simple", ], 
+           txt = "LIBGEO", cex - 0.9, halo = TRUE, r = 0.15)
+
+barscale(size = 5, cex = 0.8, lwd = 1)
+north(pos = "topleft")
+
+layoutLayer(title = "Demographic trends in Martinique (2008-2013)",
+            sources = "INSEE, 2016", 
+            scale = NULL, tabtitle = TRUE, north = FALSE, frame = FALSE)
+
+dev.off()
+
+
+
+```
+
+
+
+
+# Try with Japan shapefiles!
+
+
+```{r}
+library(cartography)
+library(sf)
+library(dplyr)
+library(purrr)
+library(jpndistrict)
+
+sf_ja <- 24:39 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+sf_ja <- as(sf_ja, "Spatial")
+sf_ja <- st_as_sf(sf_ja)
+
+ja_pencil <- getPencilLayer(x = sf_ja)
+
+plot(st_geometry(sf_ja))
+plot(st_geometry(mtq))
+
+shig_gifu <- c(21, 25) %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = TRUE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+plot(st_geometry(shig_gifu), col = "white")
+
+shigifu <- getPencilLayer(x = shig_gifu)
+
+
+nagano <- jpn_pref(pref_code = 20, district = TRUE) %>% st_simplify(dTolerance = 0.01)
+
+plot(st_geometry(nagano), col = "white")
+
+nagano_pencil <- getPencilLayer(x = nagano)
+
+```
+
+
+
+
+
+
+```{r}
+houston <- ggmap::zips
+
+hou_st <- st_as_sf(houston, coords = c("longitude" = "lon", "latitude" = "lat"))
+
+plot(st_geometry(hou_st))
+
+```
+
+
+```{r}
+us_states <- spData::us_states
+
+plot(st_geometry(us_states))
+
+us_pencil <- getPencilLayer(x = us_states)
+
+```
+
+
+
+
+
+
+
+

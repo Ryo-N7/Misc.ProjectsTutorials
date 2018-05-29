@@ -36,13 +36,18 @@ sf_pref_kanto <- 8:14 %>%
   map(~jpn_pref(., district = FALSE)) %>% 
   reduce(rbind)
 
-jpn_pref(pref_code = 13, district = TRUE) %>% 
+sf_tokyo <- jpn_pref(pref_code = 13, district = TRUE) %>% 
     st_simplify(dTolerance = 0.01) %>% 
     mutate(city_code = as.numeric(city_code)) %>% 
-    filter(city_code != 13421) # filter out the Ogasawara Islands (off the coast)
+    filter(city_code != 13421) %>% # filter out the Ogasawara Islands (off the coast)
+    st_union() %>% 
+    as.data.frame() %>% 
+    mutate(jis_code = "13", prefecture = "Tokyo") %>% 
+    magrittr::set_names(c("geometry", "jis_code", "prefecture")) %>% 
+    st_as_sf()
 
-
-
+sf_pref_kanto <- rbind(sf_pref_kanto, sf_tokyo)
+plot(sf_pref_kanto)
 # Kyushu
 
 sf_pref_kyushu <- 40:47 %>% 

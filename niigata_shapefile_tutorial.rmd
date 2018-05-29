@@ -1,0 +1,197 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "May 29, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+https://qiita.com/nozma/items/8e890595c07d3be86bc9
+
+```{r}
+library(sf)
+library(dplyr)
+library(ggplot2)
+
+map <- read_sf("../niigata_chuo/h27ka15103.shp")
+
+ggplot() +
+  geom_sf(data = map)
+
+# remove geo lines + background grid
+ggplot() +
+  geom_sf(data = map, fill = NA) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+```
+
+Can NOT use `st_union()`'d sf dataframes with ggplot!!
+
+- Use `summarise()` !!
+
+```{r}
+
+map %>% 
+  st_union() %>% 
+  ggplot() + 
+  geom_sf(fill = NA)
+# Error: `data` must be a data frame, or other object coercible by `fortify()`, not an S3 object with class sfc_POLYGON/sfc
+
+map %>% 
+  summarise("") %>% 
+  ggplot() +
+  geom_sf(fill = NA) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+
+```
+
+group_by() each city/municipality
+
+```{r}
+map2 <- read_sf("../niigata_all/h27ka15.shp")
+
+# look at entire prefecture :: WARNING TAKES A LONG TIME
+map2 %>% 
+  ggplot() +
+  geom_sf(fill = NA) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+# just group_by() the CITY_NAME
+
+map2 %>% 
+  group_by(CITY_NAME) %>% 
+  summarize("") %>% 
+  ggplot() +
+  geom_sf(fill = NA) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+```
+
+
+Save as '.svg'
+
+```{r}
+p <- ggplot(map) +
+  geom_sf(fill = NA) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+# install.package("svglite")
+ggsave(p, filename = "niigata.svg", device = "svg")
+
+```
+
+## Labelling geom_sf maps!
+
+Calculate centroids as the coordinates to place the labels.
+
+```{r}
+
+map2 %>% 
+  group_by(CITY_NAME) %>% 
+  summarize("") %>% 
+  mutate(
+    centroid = st_centroid(geometry), 
+    x = st_coordinates(centroid)[, 1],
+    y = st_coordinates(centroid)[, 2]
+  ) %>% 
+  ggplot() +
+  geom_sf(fill = NA) +
+  geom_text(aes(x = x, y = y, label = CITY_NAME),
+            family = "MS Mincho", size = 2.5) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+## tokyo 
+
+```{r}
+tokyo_map <- read_sf("../tokyo_all/h27ka13.shp")
+
+library(tidyr)
+library(stringr)
+
+# split KEY_CODE col into city_code + whatever village code?
+#tokyo_map %>% 
+#  separate(KEY_CODE, into = c("city", "extra_code"), sep = "^[0-9]{5}") %>% glimpse()
+# extract first 5 digits?
+# tokyo_map %>% 
+#   mutate(city = KEY_CODE %>% str_extract("^[0-9]{5}")) %>% glimpse()
+tokyo_map <- tokyo_map %>% 
+  select(KEY_CODE, PREF, CITY, PREF_NAME, CITY_NAME, AREA, geometry)
+
+tokyo_map_2 <- tokyo_map %>% 
+  select(KEY_CODE, PREF, CITY, PREF_NAME, CITY_NAME, AREA, geometry) %>% 
+  unite("city_code", c("PREF", "CITY"), sep = "")
+
+tokyo_islands <- c(13361, 13362, 13363, 13364, 13381, 13382, 13401, 13402, 13421)
+
+library(ggrepel)
+
+tokyo_map_2 %>% 
+  filter(!city_code %in% tokyo_islands) %>% 
+  group_by(CITY_NAME) %>% 
+  summarize("") %>% 
+  mutate(
+    centroid = st_centroid(geometry), 
+    x = st_coordinates(centroid)[, 1],
+    y = st_coordinates(centroid)[, 2]
+  ) %>% 
+  ggplot() + 
+  geom_sf(fill = NA) + 
+  geom_label_repel(aes(x = x, y = y, label = CITY_NAME),
+            family = "MS Mincho", size = 2.5) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+
+
+sf_pref13 %>% 
+  ggplot() +
+  geom_sf(fill = NA) +
+  coord_sf(datum = NA) +
+  theme_void()
+
+
+```
+
+
+
+```{r}
+tokyo_penpen <- cartography::getPencilLayer(x = tokyo_map_2)
+```
+
+
+
+
+
+
+
+
+
+
+
