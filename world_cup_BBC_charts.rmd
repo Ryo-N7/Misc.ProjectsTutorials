@@ -1,0 +1,96 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(tidyverse)
+library(scales)
+library(scales)
+library(ggthemes)
+
+
+wc_top_scorers <- tribble(
+  ~player, ~goals, ~country, ~code,
+  
+  "Klose", 1:16, "Germany", "DE",
+  "Ronaldo", 1:15, "Brazil", "BR",
+  "G. Mueller", 1:14, "Germany", "DE",
+  "Fontaine", 1:13, "France", "FR", 
+  "Pele", 1:12, "Brazil", "BR",
+  "Kocsis", 1:11, "Hungary", "HU",
+  "Klinsmann", 1:11, "Germany", "DE",
+  "Rahn", 1:10, "Germany", "DE",
+  "Cubillas", 1:10, "Peru", "PE",
+  "Lineker", 1:10, "England", "GB",
+  "Batistuta", 1:10, "Argentina", "AR",
+  "T. Mueller", 1:10, "Germany", "DE"
+  
+)
+
+glimpse(wc_top_scorers)
+
+
+ggplot(wc_top_scorers, 
+       aes(reorder(player, goals), goals)) +
+  geom_col(alpha = 0.9, fill = "white") +
+  geom_flag(y = -2, 
+            aes(image = code)) +
+  geom_point() +
+  coord_flip() +
+  expand_limits(y = -2) +
+  geom_text() +
+  theme_minimal()
+
+```
+
+- find flags
+- find ball pics
+- annotate for '78-94
+- flag on axis
+- geom_text number of goals
+- custom legend
+
+
+
+```{r}
+library(ggimage) # 2 letter ISO codes
+
+f <- system.file("extdata/medals.txt", package="ggimage")
+medals <- read.table(f, header=TRUE)
+p <- ggplot(medals, aes(Country, count)) + geom_col(aes(fill = medal), width = .8)
+
+p + geom_flag(y = -2, aes(image = code)) +
+    coord_flip() + expand_limits(y = -2)  +
+    scale_fill_manual(values = c("Gold" = "gold", "Bronze" = "#cd7f32", "Silver" = "#C0C0C0"))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

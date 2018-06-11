@@ -1,0 +1,144 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 8, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+life-expectancy ggplot 
+
+http://freerangestats.info/blog/2018/05/31/life-expectancy
+
+
+```{r}
+library(frs)
+library(tidyverse)
+library(scales)
+library(WDI)
+
+# WDIsearch for Indicators >>> View(WDIsearch("life"))
+
+death_rate <- WDI(indicator = "SP.DYN.CDRT.IN", start = 1960, end = 2100)
+life_exp <- WDI(indicator = "SP.DYN.LE00.IN")
+
+
+selected_countries <- c("United Arab Emirates", "Suriname", "Georgia", 
+                        "Barbados", "Kiribati", "Moldova", "Ghana", 
+                        "Japan", "New Zealand")
+
+# connected scatter plot
+
+death_rate %>% 
+  filter(country %in% selected_countries) %>% 
+  inner_join(life_exp, by = c("iso2c", "country", "year")) %>% 
+  filter(!is.na(SP.DYN.LE00.IN)) %>% 
+  mutate(country = fct_reorder(country, SP.DYN.LE00.IN)) %>% 
+  ggplot(aes(x = SP.DYN.CDRT.IN, y = SP.DYN.LE00.IN, color = country)) +
+  geom_path() +
+  # labels for min.max years
+  geom_text(aes(label = ifelse(year %in% range(year), year, "")), color = "grey30", size = 3) +
+  facet_wrap(~country, scales = "free") +
+  geom_blank(aes(x = SP.DYN.CDRT.IN * 1.1, y = SP.DYN.LE00.IN * 1.05)) +
+  geom_blank(aes(x = SP.DYN.CDRT.IN * 0.9, y = SP.DYN.LE00.IN * 0.95)) +
+  theme(legend.position = "none") +
+  labs(x = "Crude death rate (per 1,000 people)",
+       y = "Life Expectancy",
+       caption = "Source: World Bank World Development Indicators") +
+  ggtitle("Differing relationship of crude death rate and life expectancy",
+          "Countries with aging populations (eg Georgia, Japan, in the below) can experience increases in both simultaneously.")
+
+
+
+```
+
+French death rates 2015
+
+
+```{r}
+
+french_death_rates_2015 %>% glimpse()
+
+french_death_rates_2015 %>% 
+  gather(sex, value, -age) %>% 
+  ggplot(aes(x = age, y = (1000 - value) / 1000, color = sex)) +
+  geom_line() +
+  labs(x = "Age", y = "Probability of surviving to the next year", colour = "",
+       caption = "https://www.ined.fr/en/everything_about_population/data/france/deaths-causes-mortality/mortality-rates-sex-age/") +
+  coord_cartesian(ylim = c(0.8, 1), xlim = c(0, 100)) +
+  ggtitle("French death rates in 2015") +
+  scale_color_brewer(palette = "Set1") +
+  theme_classic() +
+  theme(legend.position = c(0.6, 0.6))
+```
+
+To actually convert these probabilities into a life expectancy, we need to estimate the proportion of our hypothetical population that will die at each age. There’s lots of different ways you might do this but the one that came to mind to me was:
+
+- Create interpolated death rates for each integer age (because typically death rates are given for a bracket of ages, not every single age)
+
+- Estimate the proportion still alive at any age, starting with 1 at birth and 0 at some arbitrary end point (I chose 150 which seems reasonable). This is the cumulative product of the yearly survival rates, which are of course 1 - death rate (where death rate has been converted to a probability rather than a factor out of 1,000).
+
+- Estimate the difference between those proportions for each year, which gives you the proportion of the total population that died in that year.
+
+- Take the average of all of our ages, weighted by the proportion of the population that died each year.
+
+```{r}
+#' @param age vector of ages in years
+#' @param rate death rate in deaths per 1000 people alive at the given age.  Must be the same length as age.
+#' @param data optionally, a data frame or matrix where the first column is used as age and the second column as rate
+#' @examples
+#' life_expectancy(data = french_death_rates_2015[ , c("age", "female")])
+#' life_expectancy(age = french_death_rates_2015$age, rate = french_death_rates_2015$male)
+
+life_expectancy <- function(age = data[, 1], rate = data[ , 2], data = NULL){
+  if(length(age) != length(rate) | 
+     !class(age) %in% c("numeric", "integer") | 
+     !class(rate) %in% c("numeric", "integer")){
+    stop("age and rate should be integer or numeric vectors of the same length")
+  }
+  if(max(rate) != 1000) {
+    stop("The highest value of rate should be exactly 1000, indicating the age at which everyone is guaranteed to die at or before.")
+  }
+  # interpolated version so we have a death rate for every age:
+  dr <- stats::approx(age, rate, xout = 0:max(age))
+  
+  prop_alive <- c(1, cumprod((1000 - dr$y) / 1000))
+  deaths <- -diff(prop_alive)
+  return(sum(deaths * 0:max(age)))
+}
+
+
+life_expectancy(data = french_death_rates_2015[, c("age", "male")])
+# 79.07587
+
+life_expectancy(data = french_death_rates_2015[, c("age", "female")])
+# 85.316
+
+# pretty close to actual published results!
+```
+
+
+Infant mortality is the biggest driver. The intuition behind this is that everyone who is born alive gets a chance to survive the first year, so an improvement here impacts on the biggest part of our population. If you improve the odds of surviving from 110 to 111 it has minimal impact on life expectancy because most people are already dead at that point.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

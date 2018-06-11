@@ -1,0 +1,525 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## geom_sf() on OpenStreetMap tiles: Mapview + plot osm tiles
+
+https://yutani.rbind.io/post/2018-06-09-plot-osm-tiles/
+
+
+
+```{r}
+nc <- sf::read_sf(system.file("shape/nc.shp", package="sf"))
+
+mapview::mapview(nc)
+```
+
+ggplot2 objects??
+
+
+Usage policy for OpenStreetMap tiles.
+
+
+Tile URL : https://[abc].tile.openstreetmap.org/zoom/x/y.png
+
+[abc], zoom, x, y need to be filled!
+
+
+
+zoom: 0-19. If == 0, one tile shown. zoom == 1, 2x2 tiles shown.
+
+How to choose? Roughly determine based on size of bbox of the sf object!
+
+
+
+```{r}
+b <- sf::st_bbox(nc)
+
+class(b) # bbox
+b        # xmin, ymin, xmax, ymax
+
+# calculate lenghts of x and y of bbox
+x_len <- b["xmax"] - b["xmin"]
+y_len <- b["ymax"] - b["ymin"]
+
+# calculate minimum zoom level == smaller than lengths!
+x_zoom <- sum(x_len < 360 / 2^(0:19)) - 1
+y_zoom <- sum(y_len < 170.1022 / 2^(0:19)) - 1
+# zoom level of 5!
+
+# tiles == small! so zoom a bit more...
+zoom <- min(x_zoom, y_zoom)
+zoom <- zoom + 2
+
+```
+
+x and y
+
+Pair representing location of tile. x == longitude, y = latitude. 
+For given zoom, convert lon/lat into x and y >>> from code in OSM's wiki!
+
+```{r}
+sec <- function(x) {
+  1 / cos(x)
+}
+
+lonlat2xy <- function(lat_deg, lon_deg, zoom) {
+  n <- 2^zoom
+
+  x <- (n * (lat_deg + 180)) %/% 360
+  lon_rad <- lon_deg * pi / 180
+  y <- (n * (1 - log(tan(lon_rad) + sec(lon_rad)) / pi)) %/% 2
+
+  list(x = x, y = y)
+}
+
+```
+
+
+Find set of tiles covering whole bbox??
+
+```{r}
+library(ggplot2)
+
+p <- ggplot(nc) +
+  geom_sf() +
+  annotate("rect", xmin = b["xmin"], xmax = b["xmax"], ymin = b["ymin"], ymax = b["ymax"],
+           color = alpha("red", 0.4), fill = "transparent", linetype = "dashed", size = 1.2)
+
+p
+
+```
+
+Simplify: focus on corners >>> North-West and South-East. Calculate tiles of x, y. Fill in rest of tiles by fill sequence of x, y between the NW and SE tiles!
+
+```{r}
+corners <- expand.grid(x = b[c(1, 3)], y = b[c(2, 4)])
+
+p +
+  geom_point(aes(x, y), corners[2:3,], colour = "red", size = 5)
+```
+
+tiles:
+
+```{r}
+xy <- lonlat2xy(b[c("xmin", "xmax")], b[c("ymin", "ymax")], zoom)
+
+tiles <- expand.grid(x = seq(xy$x["xmin"], xy$x["xmax"]),
+                     y = seq(xy$y["ymin"], xy$y["ymax"]))
+
+tiles
+```
+
+Using above df. create URLs for each tile.
+
+```{r}
+urls <- sprintf("https://a.tile.openstreetmap.org/%d/%d/%d.png", zoom, tiles$x, tiles$y)
+
+urls
+```
+
+Can download >>> but first check correct position of tiles.
+
+- Calculate NW corner of tile.
+
+```{r}
+xy2lonlat <- function(x, y, zoom) {
+  
+  n <- 2^zoom
+  
+  lon_deg <- x / n * 360.0 - 180.0
+  
+  lat_rad <- atan(sinh(pi * (1 - 2 * y / n)))
+  
+  lat_deg <- lat_rad * 180.0 / pi
+  
+  list(lon_deg = lon_deg, lat_deg = lat_deg)
+  
+}
+
+
+```
+
+Then calculate SE corner easily (NW tiles + 1 to x and y)
+
+```{r}
+library(purrr)
+library(dplyr, warn.conflicts = FALSE)
+
+nw_corners <- pmap_dfr(tiles, xy2lonlat, zoom = zoom)
+se_corners <- pmap_dfr(mutate_all(tiles, `+`, 1), xy2lonlat, zoom = zoom)
+
+glimpse(nw_corners)
+
+names(nw_corners) <- c("xmin", "ymax")
+names(se_corners) <- c("xmax", "ymin")
+
+tile_positions <- bind_cols(nw_corners, se_corners)
+
+glimpse(tile_positions)
+```
+
+PLOT empty tiles!
+
+```{r}
+p + 
+  geom_point(aes(x, y), corners[2:3, ], color = "red", size = 5) +
+  geom_rect(data = tile_positions, 
+            aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
+            color = "blue", fill = "transparent")
+```
+
+NOICEE.
+
+GET tile data:
+
+Need to cache URL >>> use `curl_download()`
+
+```{r}
+get_tile <- function(url) {
+  
+  path <- stringr::str_extract(url, "/\\d+/\\d+/\\d+.png")   # regex for digits of zoom, x, y
+  
+  local_png <- here::here(file.path("data", "osm-tiles", path)) # if already `here` then dont DL again!
+  
+  if (!file.exists(local_png)) {  # if NOT exist, then DL. For reproducibility purposes!!
+    
+    dir.create(dirname(local_png), showWarnings = FALSE, recursive = TRUE)
+    
+    # header
+    h <- curl::new_handle()
+    
+    curl::handle_setheaders(h, `User-Agent` = "Yutani's blog post")
+    
+    curl::curl_download(url, destfile = local_png)
+    
+  }
+  
+  png::readPNG(local_png)
+  
+}
+
+# map each URL to download tile fun
+
+glimpse(urls)
+
+pngs <- map(urls, get_tile)
+
+
+```
+
+Plotting tiles: `annotation_raster()` 
+
+- raster, xmin, xmax, ymin, ymax
+
+raster = png files, others are the values in tile_positions!
+
+```{r}
+args <- tile_positions %>% 
+  mutate(raster = pngs)
+
+
+ggplot(nc) +
+  pmap(args, annotation_raster, interpolate = TRUE) +
+  geom_sf(fill = alpha("red", 0.3)) +
+  labs(caption = "\U00a9 OpenStreetMap contributors") + # VERY IMPORTANT!
+  theme_minimal()
+
+
+```
+
+Set CRS 
+
+nc == EPSG 4267
+OSM == EPSG 4326
+
+```{r}
+sf::st_crs(nc)
+
+# convert NC to OSM's CRS!
+nc_4326 <- sf::st_transform(nc, crs = 4326)
+
+nc_4326_not_transformed <- sf::`st_crs<-`(nc, 4326)
+
+ggplot() +
+  geom_sf(data = nc_4326_not_transformed, fill = "transparent", color = "red") +
+  geom_sf(data = nc_4326, fill = "transparent", color = "blue") + 
+  theme_minimal()
+
+```
+
+Minimal differences at this scale... differences can be seen as the red lines peeking out from the blue.
+
+
+
+
+
+## 2. 
+
+http://uribo.hatenablog.com/entry/2018/06/10/095921
+
+Wikiに書かれているコードをちょっと修正して、緯度経度とズームレベルを与えた時にピクセル座標とズームレベルをリストで返す関数を定義します。
+
+```{r}
+library(magrittr)
+
+deg2num <- function(longitude, latitude, zoom) {
+  
+  lat_rad <- latitude * pi / 180
+  
+  n <- 2.0 ^ zoom
+  
+  xtile <- floor((longitude + 180.0) / 360.0 * n)
+  ytile <- floor((1.0 - log(tan(lat_rad) + (1 / cos(lat_rad))) / pi) / 2.0 * n)
+  
+  return(list(xtile = xtile,
+              ytile = ytile,
+              zoom = zoom))
+  
+}
+
+```
+
+
+タイル座標が判明したので、次は一枚のタイルがカバーする領域の座標を求めることにします。これには、タイルの一角の座標を取得したあとで、周辺に隣接するタイルの座標を求めるという方法を採用します。まずは先ほどのタイル座標の領域に含まれる緯度経度座標の北東となる座標を取得する処理です。
+
+```{r}
+num2deg <- function(xtile, ytile, zoom) {
+  n = 2.0 ^ zoom
+  longitude = xtile / n * 360.0 - 180.0
+  lat_rad = atan(sinh(pi * (1 - 2 * ytile / n)))
+  latitude = lat_rad / 0.01745329
+  return(list(longitude = longitude, 
+              latitude = latitude,
+              zoom = zoom))
+}
+```
+
+Take tile coordinates >> coordinates into bbox and turn into polygon geometry object
+
+```{r}
+tile_bbox <- function(xtile, ytile, zoom) {
+  
+  ytile <- c(ytile, ytile + 1, ytile + 1, ytile, ytile)
+  xtile <- c(xtile, xtile, xtile + 1, xtile + 1, xtile)
+  
+  purrr::map2_dfr(
+    xtile, 
+    ytile,
+    ~ num2deg(.x, .y, zoom)) %>% 
+    dplyr::select(-zoom) %>% 
+    as.matrix() %>% 
+    list() %>% 
+    sf::st_polygon() %>% 
+    sf::st_sfc(crs = 4326)
+  
+  
+}
+
+# demonstrate:
+
+deg2num(140.113889, 35.613056, 10) %>% 
+  purrr::pmap(
+    ~ tile_bbox(..1, ..2, ..3)
+  )
+
+library(mapview)
+
+mapview(deg2num(140.113889, 35.613056, 10) %>% 
+          purrr::pmap(
+            ~ tile_bbox(..1, ..2, 10)
+          ) %>% .[[1]])
+
+
+```
+
+
+地物を覆う領域のタイル座標
+
+さてここからが本番です。一点の座標ではなく、地物を覆う領域のタイル座標にはどうすれば良いでしょう。答えは単に、対象の地物の矩形からタイルを作成することです。例として、「岡山県」を覆うタイルを描画してみましょう
+
+
+```{r}
+library(dplyr)
+library(sf)
+library(jpndistrict)
+
+df_33 <- 
+  jpn_pref(33)
+
+glimpse(df_33) # Okayama Prefecture
+
+b <- 
+  df_33 %>% 
+  st_bbox()
+
+b # bounding box for Okayama Pref.
+
+```
+
+Now we know the boundaires for Okayama Pref. Create tile coordinates that cover this boundary!
+
+Use tidyr::crossing() instead of expand.grid()!
+
+```{r}
+df_tiles <- 
+  tidyr::crossing(
+    x = seq(
+      deg2num(b["xmin"], b["ymin"], z = 10)[["xtile"]],
+      deg2num(b["xmax"], b["ymax"], z = 10)[["xtile"]]
+    ),
+    
+    y = seq(
+      deg2num(b["xmin"], b["ymin"], z = 10)[["ytile"]],
+      deg2num(b["xmax"], b["ymax"], z = 10)[["ytile"]]
+    )
+  ) %>% 
+  dplyr::mutate(zoom = 10)
+
+glimpse(df_tiles)
+
+```
+
+With this df of tile coordinates >>> turn them into polygons
+
+```{r}
+df_tiles <- 
+  df_tiles %>% 
+  mutate(geometry = purrr::pmap(., ~ tile_bbox(..1, ..2, ..3) %>% 
+                                  st_sf(crs = 4326))) %>% 
+  tidyr::unnest() %>% 
+  st_sf(crs = 4326)
+```
+
+
+For label, create centroid for each of the tile polygons
+
+```{r}
+df_tiles <- 
+  df_tiles %>% 
+  mutate(longitude = purrr::pmap_dbl(., ~ st_centroid(..4)[1]),
+         latitude = purrr::pmap_dbl(., ~ st_centroid(..4)[2]))
+
+library(ggplot2)
+
+ggplot() +
+  geom_sf(data = df_33) +
+  geom_sf(data = df_tiles, alpha = 0.5) +
+  geom_text(data = df_tiles,
+            aes(longitude, latitude, label = paste(zoom, x, y, sep = "/")),
+            color = "red", size = 3)
+
+
+```
+
+Still a few sections where the tile does not include any part of Okayama Pref. 
+
+Filter out those tiles that are not in Okayama Pref.
+
+```{r}
+st_tiles <- function(x, zoom) {
+  
+  b <- st_bbox(x)
+  zoom <- rlang::enquo(zoom)
+ 
+  tidyr::crossing(
+    x = seq(
+      deg2num(b["xmin"], b["ymin"], z = !!zoom)[["xtile"]],
+      deg2num(b["xmax"], b["ymax"], z = !!zoom)[["xtile"]]
+    ),
+    y = seq(
+      deg2num(b["xmin"], b["ymin"], z = !!zoom)[["ytile"]],
+      deg2num(b["xmax"], b["ymax"], z = !!zoom)[["ytile"]]
+    )
+  ) %>% 
+    dplyr::mutate(zoom = !! zoom) %>% 
+    dplyr::mutate(geometry = purrr::pmap(., ~ tile_bbox(..1, ..2, ..3) %>% 
+                                           st_sf(crs = 4326))) %>% 
+    tidyr::unnest() %>% 
+    st_sf(crs = 4326) %>% 
+    dplyr::mutate(longitude = purrr::pmap_dbl(., ~ st_centroid(..4)[1]),
+                  latitude = purrr::pmap_dbl(., ~ st_centroid(..4)[2])) %>% 
+    dplyr::mutate(check = purrr::pmap(., ~ st_intersects(..6,
+                                                         !!rlang::eval_tidy(x),
+                                                         sparse = FALSE) %>%
+                                        rowSums()) > 0) %>%
+    dplyr::filter(check == TRUE)
+}
+```
+
+
+
+```{r}
+
+df_tiles %>% glimpse()
+
+# use st_intersects to check if df_tiles geometry intersect with geometry in df_33 Okayama sf
+df_tiles <- df_tiles %>% mutate(check = purrr::pmap(., ~ st_intersects(..6,
+                                        df_33, # Okayama Pref. sf
+                                        sparse = FALSE) %>% 
+                      rowSums()) > 0) %>% 
+  filter(check == TRUE) # only select df_tiles that intersect with df_33
+
+# change zoom level to 11
+df_tiles_intersect <- 
+  st_tiles(df_33, 11)
+
+
+```
+
+PLOT
+
+```{r}
+ggplot() +
+  geom_sf(data = df_33) +
+  geom_sf(data = df_tiles_intersect, alpha = 0.5) +
+  geom_text(data = df_tiles_intersect, 
+            aes(longitude, latitude, label = paste(zoom, x, y, sep = "/")),
+            color = "red", size = 1.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

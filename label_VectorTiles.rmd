@@ -1,0 +1,196 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 11, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+http://uribo.hatenablog.com/entry/2017/10/12/083110
+
+Labelling GoogleMaps + OpenStreetMap features.
+
+
+
+Use: 
+https://cyberjapandata.gsi.go.jp/xyz/experimental_nrpt/{z}/{x}/{y}.geojson
+
+From GSI Japan
+
+```{r}
+latlon2tile <- function(lon, lat, z) {
+    x = trunc((lon/180 + 1) * 2^z/2)
+    y = trunc(((-log(tan((45 + lat/2) * pi/180)) + 
+        pi) * 2^z/(2 * pi)))
+    return(list(x = x, y = y, zoom = z))
+}
+```
+
+use the function above to create coordinates for the area we want to map.
+
+```{r}
+(xyz <- latlon2tile(133.938, 34.6636, 15))
+```
+
+Note that the VectorTile data is anchored at zoom level 15.
+
+Read in the .geojson files with the sf package.
+
+```{r}
+library(sf)
+
+# 居住地名
+df.nrpt <- read_sf(paste0("https://cyberjapandata.gsi.go.jp/xyz/experimental_nrpt/", 
+    paste(xyz[3], xyz[1], xyz[2], sep = "/"), 
+    ".geojson"))
+
+# 公共施設
+df.nffpt <- read_sf(paste0("https://cyberjapandata.gsi.go.jp/xyz/experimental_pfpt/", 
+    paste(xyz[3], xyz[1], xyz[2], sep = "/"), 
+    ".geojson"))
+
+dplyr::glimpse(df.nrpt)
+
+
+```
+
+Download Okayama City shapefiles from estat.jp!
+
+```{r}
+library(dplyr)
+library(purrr)
+
+pref33 <- read_sf("../A002005212015DDSWC33102") %>% 
+  rbind(read_sf("../A002005212015DDSWC33101")) %>% 
+  st_transform(crs = 4326) %>% 
+  select(MOJI)
+
+glimpse(pref33)
+
+```
+
+Filter the shapefile data so we only use the areas we have in our VectorTiles data. 
+
+Use `st_contains()` to find the specific points and polygons.
+
+```{r}
+which.row <- data_frame(contains = pref33$geometry %>% 
+                          map(~st_contains(.x, df.nrpt$geometry)) %>% 
+                          flatten() %>% 
+                          map_lgl(~!identical(.,
+                                              integer(0)))) %>% 
+  mutate(row_num = row_number()) %>% 
+  filter(contains == TRUE) %>% 
+  magrittr::use_series(row_num) # only select row_num vector
+
+glimpse(which.row)
+
+pref33mod <- pref33 %>% slice(which.row)
+
+glimpse(pref33mod)
+
+```
+
+
+PLOT
+
+first, create centroid for labels
+
+```{r}
+df.nrpt %>% glimpse()
+
+df.nrpt %<>% 
+  select(name, kana) %>% 
+  mutate(lon = map_dbl(geometry, ~st_centroid(.x)[[1]]), 
+         lat = map_dbl(geometry, ~st_centroid(.x)[[2]]))
+
+glimpse(df.nrpt)
+
+df.nffpt %<>% 
+  select(type, name = pfName) %>% 
+  mutate(lon = map_dbl(geometry, ~st_centroid(.x)[[1]]), 
+         lat = map_dbl(geometry, ~st_centroid(.x)[[2]]))
+
+glimpse(df.nffpt)
+
+```
+
+PLOT
+
+```{r}
+library(ggplot2)
+library(ggrepel)
+
+ggplot() +
+  geom_sf(data = pref33mod, fill = "white") +
+  geom_text(data = df.nrpt, 
+            aes(label = name, x = lon, y = lat, alpha = 0.5), 
+            family = "PIAexGothic", size = 3) +
+  geom_sf(data = df.nffpt, 
+          aes(color = "red")) +
+  geom_text_repel(data = df.nffpt, 
+                  aes(label = name, x = lon, y = lat),
+                  family = "IPAexGothic", size = 2) +
+  theme(legend.position = "none") # OR use guides(alpha = FALSE, color = FALSE)
+
+
+```
+
+
+PLOT with Map Symbols!
+
+```{r warning=FALSE}
+library(emojifont)
+load.fontawesome()
+
+df.nffpt$label <- fontawesome(c("fa-dot-circle-o", "fa-plus-square",
+                                "fa-times-circle", 
+                    "fa-times-circle", "fa-university",
+                    "fa-envelope", "fa-envelope"))
+
+ggplot() +
+  geom_sf(data = pref33mod, fill = "white") +
+  geom_sf(data = df.nffpt, aes(color = "red")) +
+  geom_label_repel(data = df.nffpt,
+            aes(label = label, x = lon, y = lat), 
+            family = "fontawesome-webfont") +
+  geom_text(data = df.nrpt, aes(label = name, x = lon, y = lat,
+                                alpha = 0.5), 
+            family = "IPAexGothic", size = 3) + 
+  geom_text_repel(data = df.nffpt, aes(label = name, x = lon, y = lat), 
+             size = 2,
+             family = "IPAexGothic") +
+  guides(alpha = FALSE, color = FALSE)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

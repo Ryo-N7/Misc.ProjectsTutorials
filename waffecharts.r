@@ -1,6 +1,6 @@
 # waffle charts and infographics
 
-install.packages("waffle")
+#install.packages("waffle")
 library(waffle)
 library(extrafont)
 
