@@ -1,0 +1,48 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 13, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+
+
+```{r}
+library(tidyverse)
+
+sushi10 <- read_csv("../sushi3-2016/sushi10.csv", col_names = TRUE)
+
+sushi10_rank <- sushi10 %>% 
+  mutate(sushi = str_remove_all(`10 1`, "0 10") %>% trimws()) %>% 
+  select(-`10 1`) %>% 
+  separate(sushi, 
+           into = c("1st", "2nd", "3rd", "4th", "5th", 
+                    "6th", "7th", "8th", "9th", "10th"),
+           by = " ") 
+
+
+# ex. first respondent: placed 5 == Ikura as 1st Favorite!
+sushi_names <- c("Ebi 0", "Anago 1", "Maguro 2", "Ika 3", "Uni 4", 
+                 "Ikura 5", "Tamago 6", "Toro 7", "Tekkamaki 8", "Kappamaki 9")
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
