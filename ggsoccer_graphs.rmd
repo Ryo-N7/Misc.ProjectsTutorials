@@ -35,18 +35,19 @@ cross_data <- data.frame(x = 76,
                          x2 = 94,
                          y2 = 60)
 
-
 # Saudi failed clearance 
 clearance_data <- data.frame(x = c(94),
                              y = c(35),
                              x2 = c(82),
-                             y2 = c(35))
+                             y2 = c(33.5))
+
 # Gazinski header
 goal_data <- data.frame(x = c(94),
                         y = c(60),
                         x2 = c(99.2),
                         y2 = c(47.5))
 
+# soccer ball image
 goal_img <- data.frame(x = 100,
                        y = 47) %>% 
   mutate(image = "https://d30y9cdsu7xlg0.cloudfront.net/png/43563-200.png")
@@ -100,7 +101,7 @@ g <- ggplot(pass_data) +
   ggtitle(label = "Russia (5) vs. (0) Saudi Arabia", 
           subtitle = "First goal, Yuri Gazinsky (12th Minute)") +
   labs(caption = "By Ryo Nakagawara (@R_by_Ryo)") +
-  geom_label(aes(x = 94, y = 60, label = "Gazinskiy"), hjust = -0.1) +
+  geom_label(aes(x = 94, y = 60, label = "Gazinsky"), hjust = -0.1) +
   geom_label(aes(x = 83, y = 23, label = "Golovin"), hjust = -0.05) +
   geom_label(aes(x = 75, y = 11, label = "Golovin"), hjust = -0.1) +
   geom_label(aes(x = 98, y = 0, label = "Zhirkov"), vjust = -0.3) +
