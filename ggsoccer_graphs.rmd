@@ -1,0 +1,153 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 15, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(tidyverse)
+library(ggsoccer)
+library(ggimage)
+library(extrafont)
+loadfonts()
+
+#                              2   1  
+pass_data <- data.frame(x = c( 84, 82),
+                        y = c(  6, 32),
+                        x2 = c(77, 84),
+                        y2 = c(13, 8))
+
+#                            corner kick
+curve_data <- data.frame(x = c(100),
+                         y = c(0),
+                         x2 = c(94),
+                         y2 = c(35))
+# golovin cross
+cross_data <- data.frame(x = 76,
+                         y = 19,
+                         x2 = 94,
+                         y2 = 60)
+
+
+# Saudi failed clearance 
+clearance_data <- data.frame(x = c(94),
+                             y = c(35),
+                             x2 = c(82),
+                             y2 = c(35))
+# Gazinski header
+goal_data <- data.frame(x = c(94),
+                        y = c(60),
+                        x2 = c(99.2),
+                        y2 = c(47.5))
+
+goal_img <- data.frame(x = 100,
+                       y = 47) %>% 
+  mutate(image = "https://d30y9cdsu7xlg0.cloudfront.net/png/43563-200.png")
+
+# golovin movement
+golovin_data <- data.frame(x = c(83),
+                           y = c(24.25),
+                           x2 = c(77),
+                           y2 = c(21))
+
+# zhirkov movement 
+zhirkov_data <- data.frame(x = 98,
+                           y = 2,
+                           x2 = 88,
+                           y2 = 6)
+
+g <- ggplot(pass_data) +
+  annotate_pitch() +
+  geom_segment(aes(x = x, y = y, xend = x2, yend = y2),
+               arrow = arrow(length = unit(0.25, "cm"),
+                             type = "closed")) +
+  geom_segment(data = clearance_data,
+               aes(x = x, y = y, xend = x2, yend = y2
+                   ), linetype = "dashed", size = 0.85) +
+  geom_segment(data = goal_data,
+               aes(x = x, y = y, xend = x2, yend = y2
+                   ), linetype = "dashed", color = "red", size = 0.85) +
+  geom_segment(data = golovin_data,
+               aes(x = x, y = y, xend = x2, yend = y2
+                   ), linetype = "dashed", color = "darkgreen", size = 1.2) +
+  geom_segment(data = zhirkov_data,
+               aes(x = x, y = y, xend = x2, yend = y2
+                   ), linetype = "dashed", color = "darkgreen", size = 1.25) +
+  geom_curve(data = curve_data, 
+             aes(x = x, y = y, xend = x2, yend = y2), 
+             curvature = 0.25, 
+             arrow = arrow(length = unit(0.25, "cm"),
+                             type = "closed")) +
+  geom_curve(data = cross_data, 
+             aes(x = x, y = y, xend = x2, yend = y2), 
+             curvature = 0.25, 
+             arrow = arrow(length = unit(0.25, "cm"),
+                             type = "closed")) +
+  geom_image(data = goal_img,
+             aes(x = x, y = y,
+                 image = image), size = 0.035) +
+  theme_pitch() + 
+  theme(text = element_text(family = "Trebuchet MS")) +
+  coord_flip(xlim = c(49, 101),
+             ylim = c(-1, 101)) +
+  ggtitle(label = "Russia (5) vs. (0) Saudi Arabia", 
+          subtitle = "First goal, Yuri Gazinsky (12th Minute)") +
+  labs(caption = "By Ryo Nakagawara (@R_by_Ryo)") +
+  geom_label(aes(x = 94, y = 60, label = "Gazinskiy"), hjust = -0.1) +
+  geom_label(aes(x = 83, y = 23, label = "Golovin"), hjust = -0.05) +
+  geom_label(aes(x = 75, y = 11, label = "Golovin"), hjust = -0.1) +
+  geom_label(aes(x = 98, y = 0, label = "Zhirkov"), vjust = -0.3) +
+  geom_label(aes(x = 84, y = 6, label = "Zhirkov"), vjust = -0.3) +
+  annotate("text", x = 69, y = 65, family = "Trebuchet MS",
+           label = "After a poor corner kick clearance\n from Saudi Arabia, Golovin picks up the loose ball, \n exchanges a give-and-go pass with Zhirkov\n before finding Gazinsky with a beautiful cross!")
+
+ggsave(g, filename = "gazinsky_goal.png")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
