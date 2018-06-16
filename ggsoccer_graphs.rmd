@@ -16,7 +16,7 @@ library(tidyverse)
 library(ggsoccer)
 library(ggimage)
 library(extrafont)
-loadfonts()
+# loadfonts()
 
 #                              2   1  
 pass_data <- data.frame(x = c( 84, 82),
@@ -116,6 +116,55 @@ ggsave(g, filename = "gazinsky_goal.png")
 
 
 
+## Cristiano Ronaldo hattrick
+
+
+```{r}
+# devtools::install_github("dill/emoGG")
+library(tidyverse)
+library(ggsoccer)
+library(extrafont)
+library(emoGG)
+library(ggimage)
+# loadfonts()
+
+emoji_search("soccer")
+
+iris %>% 
+  ggplot(aes(Sepal.Length, Sepal.Width)) +
+  geom_emoji(emoji = "26bd")
+
+pass_data <- data.frame(x = c( 84, 82),
+                        y = c(  6, 32),
+                        x2 = c(77, 84),
+                        y2 = c(13, 8))
+
+goal_img <- data.frame(x = 100,
+                       y = 47) 
+
+
+ggplot(pass_data) +
+  annotate_pitch() +
+  theme_pitch() +
+  ggimage::geom_emoji(data = goal_img,
+             aes(x = x, y = y),
+             image = "26bd", size = 0.035) +
+  emoGG::geom_emoji(aes(x = 85, y = 30),
+                    emoji = "26bd", size = 0.05) +
+  coord_flip(xlim = c(49, 101),
+             ylim = c(-1, 101)) +
+  geom_flag(aes(image = "DE"), 
+            x = 70, y = 80) +
+  geom_segment(x = 60, y = 50, xend = 70, yend = 82, 
+               linetype = "dashed", color = "darkgreen", size = 1.25) +
+  geom_curve(x = 80, y = 61, xend = 100, yend = 55, 
+             curvature = 0.3, 
+             arrow = arrow(length = unit(0.25, "cm"),
+                             type = "closed"))
+
+
+
+```
 
 
 
@@ -123,18 +172,21 @@ ggsave(g, filename = "gazinsky_goal.png")
 
 
 
+## Shots on Target  // Off Target
+
+```{r}
+
+```
 
 
 
+## Formation and line-ups
 
 
 
+```{r}
 
-
-
-
-
-
+```
 
 
 
