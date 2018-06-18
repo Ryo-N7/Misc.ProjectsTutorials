@@ -120,51 +120,75 @@ ggsave(g, filename = "gazinsky_goal.png")
 
 
 ```{r}
-# devtools::install_github("dill/emoGG")
 library(tidyverse)
 library(ggsoccer)
 library(extrafont)
 library(emoGG)
 library(ggimage)
+library(ggflags)
 # loadfonts()
+# Official WC 2018 Font: "Dusha"
+# http://fifa2018wiki.com/fifa-2018-font-typeface-download-dusha-font-ttf/509/
 
-emoji_search("soccer")
+emoji_search("soccer")  # "26bd"
 
-iris %>% 
-  ggplot(aes(Sepal.Length, Sepal.Width)) +
-  geom_emoji(emoji = "26bd")
+goals_data <- data.frame(x = c(88, 80, 71),
+                         y = c(50, 48, 54))
 
-pass_data <- data.frame(x = c( 84, 82),
-                        y = c(  6, 32),
-                        x2 = c(77, 84),
-                        y2 = c(13, 8))
-
-goal_img <- data.frame(x = 100,
-                       y = 47) 
-
-
-ggplot(pass_data) +
+cr <- ggplot(goals_data) +
   annotate_pitch() +
   theme_pitch() +
-  ggimage::geom_emoji(data = goal_img,
-             aes(x = x, y = y),
-             image = "26bd", size = 0.035) +
-  emoGG::geom_emoji(aes(x = 85, y = 30),
-                    emoji = "26bd", size = 0.05) +
-  coord_flip(xlim = c(49, 101),
+  theme(text = element_text(family = "Dusha V5")) +
+  coord_flip(xlim = c(55, 112),
              ylim = c(-1, 101)) +
-  geom_flag(aes(image = "DE"), 
-            x = 70, y = 80) +
-  geom_segment(x = 60, y = 50, xend = 70, yend = 82, 
-               linetype = "dashed", color = "darkgreen", size = 1.25) +
-  geom_curve(x = 80, y = 61, xend = 100, yend = 55, 
+  geom_curve(x = 88, y = 50, 
+             xend = 100, yend = 54,     # Penaldo
              curvature = 0.3, 
              arrow = arrow(length = unit(0.25, "cm"),
-                             type = "closed"))
+                             type = "closed")) +
+  geom_segment(x = 80, y = 48, 
+               xend = 97, yend = 48) +  # 2nd 
+  geom_segment(x = 97, y = 48, 
+               xend = 100, yend = 45.5,
+               arrow = arrow(length = unit(0.25, "cm"),
+                             type = "closed")) +        # degea fumble
+  geom_curve(x = 71, y = 54, 
+             xend = 100, yend = 54,     # FREEKICK
+             curvature = 0.3, 
+             arrow = arrow(length = unit(0.25, "cm"),
+                             type = "closed")) +
+  annotate(geom = "text", family = "Dusha V5", hjust = c(0.5, 0.5, 0.5, 0, 0, 0),
+           size = c(6.5, 4.5, 3, 3.5, 3.5, 3.5),
+           label = c("Portugal           (3) vs. Spain           (3)",
+                     "Cristiano's Hattrick (4', 44', 88')",
+                     "by Ryo Nakagawara (@R_by_Ryo)",
+                     "1. Fouled by Nacho in the box,\nCristiano confidently strokes the ball\ninto the right corner from the spot.",
+                     "2. Guedes lays it off to Cristiano whose\nstrong shot is uncharacteristically\nfumbled by De Gea into the net.",
+                     "In the final minutes of the game,\nCristiano wins a freekick against Pique\nand curls it beautifully over the wall."),
+           x = c(110, 105, 53, 76, 66, 66), 
+           y = c(30, 20, 85, 5, 5, 55)) +
+  ggimage::geom_flag(aes(image = "PT"),       # Portugal Flag
+            x = 110, y = 19, size = 0.08) +
+  ggimage::geom_flag(aes(image = "ES"),       # Spain Flag
+            x = 110, y = 51.5, size = 0.08) +
+  ggimage::geom_emoji(aes(x = 105, 
+                          y = c(45, 50, 55)),
+             image = "26bd", size = 0.035) +
+  geom_point(aes(x = x, y = y), 
+             shape = 21, size = 7, color = "black", fill = "white") +
+  geom_text(aes(x = x, y = y, label = c(1, 2, 3)), family = "Dusha V5")
 
-
+ggsave(cr, filename = "cr_hattrick.png")
 
 ```
+
+
+"1. Fouled by Nacho in the box, Cristiano confidently strokes the ball into the right corner from the spot."
+
+"2. Guedes lays it off to Cristiano who's strong shot is uncharacteristically fumbled by De Gea into the net."
+
+"3. In the final minutes of the game, Cristiano wins a freekick against Pique and curls it beautifully over the wall."
+
 
 
 
