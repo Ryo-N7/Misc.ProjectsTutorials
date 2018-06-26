@@ -1,0 +1,74 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "June 22, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## geofacet :: Japan 
+
+geofacet USA unemployment data by state in location of each state!
+
+
+```{r}
+library(ggplot2)
+library(geofacet)
+library(dplyr)
+
+ggplot(data = state_unemp,
+       aes(year, rate)) +
+  geom_line() +
+  facet_geo(~ state, grid = "us_state_grid2") +
+  scale_x_continuous(labels = function(x) paste0("'", substr(x, 3, 4))) +
+  ylab("Unemployment Rate (%)")
+
+
+```
+
+
+Japan weather data:
+
+```{r}
+library(dplyr)
+library(purrr)
+library(jpndistrict)
+library(jmastats)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

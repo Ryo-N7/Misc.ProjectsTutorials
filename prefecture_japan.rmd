@@ -80,7 +80,7 @@ class(prefectures_df)
 
 
 ```{r}
-jpnprefs
+library(purrr)
 
 sf_ja <- 1:46 %>% magrittr::extract(-13) %>%    # dont include Okinawa (47)
     map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
@@ -259,6 +259,118 @@ jpn_cartogram <- tm_shape(jpn_2carto) +
 
 
 ```
+
+cartogram 0.1.0 version!
+
+Continuous, Non-contiguous, dorling circle cartograms!
+
+```{r}
+library(dplyr)
+library(sf)
+library(cartogram)
+library(jpndistrict)
+library(tmap)
+library(stringr)
+library(purrr)
+
+
+
+prefectures_raw <- read.csv("data/prefectures_raw.csv") %>% select(-X)
+
+prefectures_df <- prefectures_raw %>% 
+  select(-Kanji, -Distr., -Municip.) %>% 
+  janitor::clean_names() %>% 
+  mutate(iso = str_replace(iso, "JP-", "") %>% 
+           str_replace("(?<![0-9])0+", ""))
+
+# area == km^2, density == per km^2
+# fix numeric data
+
+prefectures_df %>% select('population¹') # gotta delete those superscripts first!
+
+n <- prefectures_df %>% names()
+n <- n %>% str_replace_all("\\p{No}", "")
+
+# n %>% str_replace("/[\u2070-\u209f\u00b0-\u00be]+/g", "++")
+# n %>% str_replace("<sup.*?sup>", "++")
+# n %>% str_replace_all("/\p{No}/gu/", "")
+
+prefectures_df <- prefectures_df %>% 
+  magrittr::set_names(n) %>% 
+  mutate(population = str_replace_all(population, ",", "") %>% as.numeric(),
+         area = str_replace_all(area, ",", "") %>% as.numeric(),
+         density = str_replace_all(density, ",", "") %>% as.numeric())
+
+glimpse(prefectures_df)
+
+
+#
+
+sf_ja <- 1:47 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+  st_simplify(dTolerance = 0.01)
+
+object.size(sf_ja)
+# no simplify: 34729336 bytes
+# 0.01 =         253824 bytes
+# 0.1 =           55168 bytes
+
+# combine with pref df
+pref_sf <- sf_ja %>% 
+  select(-prefecture) %>% 
+  right_join(prefectures_df, by = c("jis_code" = "iso")) %>% 
+  mutate(jis_code = as.numeric(jis_code)) 
+
+glimpse(pref_sf)
+class(pref_sf)
+plot(pref_sf)
+st_crs(pref_sf)
+
+pref_sf <- pref_sf %>% st_transform(crs = 3395)
+
+glimpse(pref_sf)
+
+
+jpn_sf_cont <- cartogram_cont(pref_sf, "population", itermax = 1)
+
+jpn_sf_ncont <- cartogram_ncont(pref_sf, "population")
+
+tm_shape(pref_sf) +
+  tm_borders() +
+  tm_shape(jpn_sf_ncont) +
+  tm_polygons("population", style = "jenks") +
+  tm_layout(frame = FALSE)
+
+
+jpn_sf_dorling <- cartogram_dorling(pref_sf, "population")
+
+tm_shape(pref_sf) +
+  tm_borders() +
+  tm_shape(jpn_sf_dorling) +
+  tm_polygons("population", style = "jenks") +
+  tm_layout(frame = FALSE)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
