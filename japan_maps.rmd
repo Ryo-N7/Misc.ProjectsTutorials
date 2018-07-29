@@ -1,0 +1,247 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "July 28, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+
+
+
+```{r}
+library(riem)
+
+riem_stations(network = "JP__ASOS")
+```
+
+
+
+
+
+
+
+
+
+```{r}
+JPN <- map_data(map = "world", region = "Japan")
+
+ggplot(JPN) +
+  geom_polygon(aes(x = long, y = lat, group = group),
+               fill = NA, color = "black") +
+  theme_void()
+
+```
+
+
+
+```{r}
+library(magrittr)
+library(tidyverse)
+library(ggthemes)
+
+
+df.jp.prefs <- tibble::frame_data(
+  ~x, ~y, ~id,
+  15, 14, "HKD",
+  14, 12, "AOM",
+  15, 11, "IWT",
+  14, 11, "AKT",
+  14, 10, "MYG",
+  13, 10, "YGT",
+  14, 9, "FKS",
+  13, 9, "IBR",
+  12, 9, "NGT",
+  14, 8, "GNM",
+  13, 8, "SIT",
+  12, 8, "TCG",
+  11, 8, "TYM",
+  10, 8, "ISK",
+  14, 7, "CHB",
+  13, 7, "TKY",
+  12, 7, "YMN",
+  11, 7, "NGN",
+  10, 7, "FKI",
+  9, 7, "KYT",
+  8, 7, "HYO",
+  7, 7, "TTR",
+  6, 7, "SMN",
+  13, 6, "KNG",
+  12, 6, "SZO",
+  11, 6, "AIC",
+  10, 6, "GIF",
+  9, 6, "SIG",
+  8, 6, "OSK",
+  7, 6, "OKY",
+  6, 6, "HRS",
+  5, 6, "YMG",
+  10, 5, "MIE",
+  9, 5, "NAR",
+  9, 4, "WKY",
+  7, 4, "KGW",
+  6, 4, "EHM",
+  7, 3, "TKS",
+  6, 3, "KUC",
+  4, 5, "FKO",
+  3, 5, "SAG",
+  2, 5, "NGS",
+  3, 4, "OIT",
+  2, 4, "KUM",
+  3, 3, "MYZ",
+  2, 3, "KGS",
+  1, 1, "OKN"
+)
+```
+
+
+
+
+
+```{r}
+library(ggplot2)
+library(ggthemes)
+ggplot(df.jp.prefs, aes(x = x, y = y, group = id)) +
+      geom_point() +
+      coord_fixed(ratio = 1) +
+      theme_map()
+```
+
+
+
+
+
+
+
+
+
+
+```{r load csv}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+library(stringr)
+library(jpndistrict)
+library(purrr)
+
+
+prefectures_raw <- read.csv("data/prefectures_raw.csv")
+```
+
+```{r tidy}
+# clean names, fix ISO for when joinin with geo data
+prefectures_df <- prefectures_raw %>% 
+  select(-Kanji, -Distr., -Municip.) %>% 
+  janitor::clean_names() %>% 
+  mutate(iso = str_replace(iso, "JP-", "") %>% 
+           str_replace("(?<![0-9])0+", ""))
+
+# area == km^2, density == per km^2
+# fix numeric data
+
+prefectures_df %>% select('population¹') # gotta delete those superscripts first!
+
+n <- prefectures_df %>% names()
+n <- n %>% str_replace_all("\\p{No}", "")
+
+# n %>% str_replace("/[\u2070-\u209f\u00b0-\u00be]+/g", "++")
+# n %>% str_replace("<sup.*?sup>", "++")
+# n %>% str_replace_all("/\p{No}/gu/", "")
+
+prefectures_df <- prefectures_df %>% 
+  set_names(n) %>% 
+  mutate(population = str_replace_all(population, ",", "") %>% as.numeric(),
+         area = str_replace_all(area, ",", "") %>% as.numeric(),
+         density = str_replace_all(density, ",", "") %>% as.numeric())
+```
+
+
+
+```{r}
+library(geofacet)
+library(ggplot2)
+
+
+prefectures_df %>% 
+  rename(code = iso)
+
+
+geofacet::jp_prefs_grid1
+# left_join by code_pref_jis
+# 
+
+prefectures_df %>% 
+  rename(code = iso) %>% 
+  ggplot(aes("", y = population)) +
+  facet_geo(~code, grid = "jp_prefs_grid1")
+
+```
+
+
+```{r}
+library(rvest)
+
+url <- "https://en.wikipedia.org/wiki/List_of_Japanese_prefectures_by_population"
+
+prefectures_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("#mw-content-text > div > table:nth-child(16)") %>% 
+  .[[1]] %>% 
+  html_table()
+```
+
+
+```{r tidy}
+glimpse(prefectures_raw)
+
+# spread/gather
+
+pref_pop_hist <- prefectures_raw %>% 
+  gather(key = "year", value = "population", - Prefectures) %>% 
+  janitor::clean_names() %>% 
+  mutate(year = year %>% str_replace_all("Oct 1,\n", "") %>% as.numeric(),
+         population = population %>% str_replace_all(",", "") %>% as.numeric(),
+         prefectures = prefectures %>% str_replace_all("-.*", "")) %>% 
+  arrange(year) %>% 
+  glimpse()
+
+# fix names for some prefectures with elongated vowels!!
+
+# "Hokkaido" doesn't work as the "o" is elongated!
+pref_pop_hist %>% 
+  filter(prefectures %in% c("Hokkaido"))
+
+# iconv() to ASCII instead? 
+# or just regex them away?
+
+```
+
+
+```{r fig.height=10, fig.width=20}
+library(geofacet)
+library(ggplot2)
+
+jhist <- pref_pop_hist %>% 
+  rename(name = prefectures) %>% 
+  ggplot(aes(x = year, y = population)) +
+  geom_line() +
+  scale_x_continuous(labels = function(x) paste0("'", substr(x, 3, 4), "s")) +
+  # change pop values to in millions?
+  #scale_y_continuous(labels = function(x) paste0(substr(x, 1, 2), "M")) +
+  facet_geo(~name, grid = "jp_prefs_grid1", scales = "free_y") +
+  theme_bw()
+
+ggsave(jhist, filename = "japopop.png", height = 10, width = 20)
+
+```
+

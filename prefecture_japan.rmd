@@ -37,7 +37,7 @@ prefectures_raw <- url %>%
 glimpse(prefectures_raw)
 
 # write.csv(prefectures_raw, "prefectures_raw.csv")
-prefectures_raw <- read.csv("prefectures_raw.csv")
+prefectures_raw <- read.csv("data/prefectures_raw.csv")
 ```
 
 # tidy

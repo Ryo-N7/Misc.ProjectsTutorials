@@ -1,0 +1,263 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "July 28, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## http://lenkiefer.com/2018/07/26/getting-animated-about-new-home-sales/
+
+
+load packages
+
+```{r}
+suppressPackageStartupMessages({
+  library(data.table)
+  library(tidyverse)
+  library(viridis)
+  library(ggridges)
+  library(extrafont)
+  library(lubridate)
+  library(forcats)
+  # for animations
+  library(tweenr)
+  library(gifski)}
+  )
+```
+
+
+
+load data
+
+```{r}
+dt <- fread("data/RESSALES-mf.csv", skip = 719) # skip to row 719
+
+glimpse(dt)
+```
+
+- per_idx is a monthly index starting in January 1963
+Add dates
+
+```{r}
+df.dates <- data.frame(
+  per_idx = 1:666,
+  date = seq.Date(from = as.Date("1963-01-01"), by = "1 month", length.out = 666))
+
+df <- dt %>% left_join(df.dates, by = "per_idx")
+
+glimpse(df)
+```
+
+plot trend for new home sales
+- include band for uncertainty around estimate
+- Census provide relative standard error >>> % of point estimate
+- normal approximation to construct band around monthly estimate
+- USA: geo_idx = 1
+- total (all houses): dt_idx = 1 
+- seasonally adjusted annual rate: cat_idx = 2
+
+```{r}
+df2 <- df %>% 
+  filter(cat_idx == 2, dt_idx == 1, geo_idx == 1)
+
+# errors
+df.err <- df %>% 
+  filter(et_idx == 1, cat_idx == 2, geo_idx == 1)
+
+```
+
+- relative standard error: et_idx
+- convert to CI by `qnorm()` for compute percentiles (assume norm distr centered at estimate with SE == estimates * et_idx / 100)
+
+```{r}
+df3 <- data.frame(
+  date = df.err$date,
+  err = df.err$val
+)
+
+df3 <- df3 %>% left_join(df2, by = "date")
+
+```
+
+## plot
+
+```{r}
+df3 %>% 
+  filter(year(date) > 2014) %>% 
+  ggplot(aes(x = date, y = val, fill = "5th to 25th (75th to 95th)")) +
+  scale_fill_viridis(option = "C", discrete = T, direction = 1, 
+                     begin = 0.85, end = 0.9,
+                     name = "Confidence Interval Around Estimates") +
+  geom_ribbon(aes( # 5-25 percentile
+    ymin = qnorm(0.05, val, val * err / 100), 
+    ymax = qnorm(0.25, val, val * err / 100)),
+    alpha = 0.2) +
+  geom_ribbon(aes( # 25-75 percentile
+    ymin = qnorm(.25, val, val * err / 100), 
+    ymax = qnorm(.75, val, val * err / 100), 
+    fill = "25th to 75th pctile"), 
+    alpha = 0.5) +
+  geom_ribbon(aes( # 75-95 percentile
+    ymin = qnorm(.75, val, val * err / 100), 
+    ymax = qnorm(.95, val, val * err / 100)), 
+    alpha = 0.2) +
+  geom_line(size = 1.1, color = "#27408b") +
+  geom_hline(data = . %>% tail(1), # add line for CURRENT
+             aes(yintercept = val), linetype = 2) + 
+  scale_y_continuous(sec.axis = dup_axis()) + # add dupe axis
+  theme_ridges(font_family = "Roboto") +
+  theme(legend.position = "top", plot.title = element_text(size = 20)) +
+  labs(x = "", y = "",
+       subtitle = "New Home Sales (1000s, SAAR)",
+       title = "U.S. New Home Sales",
+       caption = "@lenkiefer Source: U.S. Census Bureau and Department of Housing and Urban Development\nConfidence interval based on normal distribution given relative standard error.\nDotted line at June 2018 estimate")
+```
+
+
+WIDE CI
+
+## Regional trends
+
+```{r}
+df2.r <- filter(df, 
+                cat_idx==2,   # NSA home sales
+                dt_idx==1,    # All houses
+                ! geo_idx ==1 # not region =1 (excludes US)
+                )
+
+df.err.r <- filter(df, et_idx==1, cat_idx==2,! geo_idx ==1)
+
+df3.r <- data.frame(date=df.err.r$date,err=df.err.r$val,geo_idx=df.err.r$geo_idx)
+
+df3.r <- left_join(df3.r, df2.r, by=c("date","geo_idx")) 
+
+
+df3.r <- 
+  df3.r %>%
+  mutate(mname=fct_reorder(factor(as.character(date, format="%b")),-month(date)),
+         year=year(date),
+         region=case_when(
+           geo_idx==1 ~ "US",
+           geo_idx==2 ~ "Northeast",
+           geo_idx==3 ~ "Midwest",
+           geo_idx==4 ~ "South",
+           geo_idx==5 ~ "West"
+         ))
+
+```
+
+### plot
+
+```{r}
+ggplot(data=filter(df3.r,year(date)>2014), 
+       aes(x=date, y=val, fill="5th to 25th (75th to 95th)"))+
+  scale_fill_viridis(option="C", discrete=T, direction=1, 
+                     begin=0.85,end=0.9, name="Confidence Interval Around Estimates")+
+  geom_ribbon(aes(
+    ymin=qnorm(.05,val,val*err/100), 
+    ymax=qnorm(.25,val,val*err/100)), alpha=0.25)+
+  geom_ribbon(aes(
+    ymin=qnorm(.25,val,val*err/100), 
+    ymax=qnorm(.75,val,val*err/100), fill="25th to 75th pctile"), alpha=0.75)+
+  geom_ribbon(aes(
+    ymin=qnorm(.75,val,val*err/100), 
+    ymax=qnorm(.95,val,val*err/100)), alpha=0.25)+
+  facet_wrap(~paste0(region," Region"),scales="free")+
+  geom_line(size=1.05,color="#27408b")+
+  geom_hline(data= .%>% filter(date==max(df3$date)), 
+             aes(yintercept=val),linetype=2)+
+  scale_y_continuous(sec.axis=dup_axis())+
+  theme_ridges(font_family="Roboto")+
+  theme(legend.position="top", plot.title=element_text(size=20))+
+  labs(x="", y="",
+       subtitle="New Home Sales (1000s, SAAR)\nNote different scale for each panel!",
+       title="U.S. Regional New Home Sales",
+       caption="@lenkiefer Source: U.S. Census Bureau and Department of Housing and Urban Development\nConfidence interval based on normal distribution given relative standard error.\nDotted line at June 2018 estimate")
+```
+
+
+## Year-to-Date totals + compare across years
+
+
+```{r}
+df.nsa <- df %>% 
+  filter(cat_idx == 1, dt_idx == 1, geo_idx == 1) %>% 
+  select(date, geo_idx, val) %>% 
+  mutate(mname = fct_reorder(factor(as.character(date, format = "%b")), -month(date)),
+         year = year(date)) %>% 
+  group_by(year) %>% 
+  mutate(vsum = cumsum(val)) %>% # cumulative values of # of new home sales
+  ungroup()
+```
+
+### plot
+
+```{r}
+df.nsa %>% 
+  filter(year <= 21999, year > 1989, month(date) <= 6) %>% 
+  ggplot(aes(x = factor(year), y = val, fill = mname, label = mname)) +
+  geom_col(alpha = 0.7) +
+  coord_flip() +
+  geom_text(aes(y = vsum), hjust = 1, color = "white") +
+  scale_fill_viridis_d(option = "C", end = 0.9, name = "Month") +
+  theme_ridges(font_family = "Roboto Condensed", font_size = 14) +
+  theme(legend.position = "none") +
+  geom_hline(data = . %>% tail(1), 
+             aes(yintercept = vsum), linetype = 2) +
+  labs(x="year",y="New Home Sales (1000s NSA)",
+       title="U.S. New Home Sales",
+       subtitle="Year-to-date total through June",
+       caption="@lenkiefer Source: U.S. Census Bureau and Department of Housing and Urban Development\ndotted line at 2018 value") + 
+  guides(colour = guide_legend(reverse=FALSE))
+```
+
+
+
+
+
+## Animated
+
+
+```{r}
+library(gganimate)
+
+df.nsa %>% 
+  filter(year <= 21999, year > 1989, month(date) <= 6) %>% 
+  ggplot(aes(x = factor(year), y = val, fill = mname, label = mname)) +
+  geom_col(alpha = 0.7) +
+  coord_flip() +
+  geom_text(aes(y = vsum), hjust = 1, color = "white") +
+  scale_fill_viridis_d(option = "C", end = 0.9, name = "Month") +
+  theme_ridges(font_family = "Roboto Condensed", font_size = 14) +
+  theme(legend.position = "none") +
+  geom_hline(data = . %>% tail(1), 
+             aes(yintercept = vsum), linetype = 2) +
+  labs(x="year",y="New Home Sales (1000s NSA)",
+       title="U.S. New Home Sales",
+       subtitle="Year-to-date total through June",
+       caption="@lenkiefer Source: U.S. Census Bureau and Department of Housing and Urban Development\ndotted line at 2018 value") + 
+  guides(colour = guide_legend(reverse=FALSE))
+
+
+# each month col for each year >>> move
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
