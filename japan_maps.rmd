@@ -211,18 +211,20 @@ pref_pop_hist <- prefectures_raw %>%
   janitor::clean_names() %>% 
   mutate(year = year %>% str_replace_all("Oct 1,\n", "") %>% as.numeric(),
          population = population %>% str_replace_all(",", "") %>% as.numeric(),
-         prefectures = prefectures %>% str_replace_all("-.*", "")) %>% 
+         prefectures = prefectures %>% str_replace_all("-.*", ""),
+         prefectures = prefectures %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
   arrange(year) %>% 
   glimpse()
 
 # fix names for some prefectures with elongated vowels!!
 
 # "Hokkaido" doesn't work as the "o" is elongated!
-pref_pop_hist %>% 
-  filter(prefectures %in% c("Hokkaido"))
-
 # iconv() to ASCII instead? 
 # or just regex them away?
+
+pref_names <- pref_pop_hist %>% select(prefectures) %>% pull() %>% unique()
+
+pref_names %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")  # NOICE.gif
 
 ```
 
@@ -233,13 +235,26 @@ library(ggplot2)
 
 jhist <- pref_pop_hist %>% 
   rename(name = prefectures) %>% 
-  ggplot(aes(x = year, y = population)) +
-  geom_line() +
-  scale_x_continuous(labels = function(x) paste0("'", substr(x, 3, 4), "s")) +
+  ggplot(
+    aes(x = year, y = population)) +
+  geom_line(color = "black") +
+  scale_x_continuous(
+    labels = function(x) paste0("'", substr(x, 3, 4), "s")) +
   # change pop values to in millions?
   #scale_y_continuous(labels = function(x) paste0(substr(x, 1, 2), "M")) +
   facet_geo(~name, grid = "jp_prefs_grid1", scales = "free_y") +
-  theme_bw()
+  theme_bw() +
+  theme(
+    title = element_text(size = 20),
+    axis.text = element_text(size = 6),
+    axis.title = element_blank(),
+    panel.grid.minor = element_blank()
+  ) +
+  labs(
+    title = "Japan Population Growth 1980-2010",
+    subtitle = "Data in 5-year intervals",
+    caption = "Source: Census of Japan via Wikipedia"
+  )
 
 ggsave(jhist, filename = "japopop.png", height = 10, width = 20)
 
