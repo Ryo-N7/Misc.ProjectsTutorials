@@ -159,7 +159,7 @@ lfc_minutes <- results_comb %>%
 # rectanglular highlight for players in their prime:
 rect_df <- data.frame(
   xmin = 24, xmax = 30,
-  ymin = 0.0, ymax = 1.0
+  ymin = -Inf, ymax = Inf
 )
 
 # annotations data frame:
@@ -168,10 +168,6 @@ rect_df <- data.frame(
 # NOTE: Naby, Alisson, Fabinho all use minutes from their respective league games
 # Encouraging to see Liverpool buying players in their prime AND regulars in their previous teams
 # Arguably our entire best Starting XI are going to be in their prime coming into this season!
-
-annotation_df <- data.frame(
-  label = "Encouraging to see Liverpool buying players in their prime AND regulars in their previous teams.\nArguably our entire best Starting XI are going to be in their prime coming into this season!"
-)
 
 ```
 
@@ -239,12 +235,13 @@ lfc_minutes %>%
     size = 4, nudge_x = 0.5, nudge_y = 0.02,
     seed = 8) +
   scale_y_continuous(
+    expand = c(0.01, 0),
     limits = c(0, 1), 
     labels = percent_format()) +
   scale_x_continuous(
     breaks = pretty_breaks(n = 10)) +
   labs(
-    x = "Age", y = "% of Minutes Played", 
+    x = "Age (Beginning of 17/18 Season)", y = "% of Minutes Played", 
     title = "Liverpool FC: Age-Utility Matrix",
     subtitle = "Premier League 17/18 (Summer 2018 transfers in bold)",
     caption = "Data from transfermarkt.com\nInspired by @FinerMargins\nBy @R_by_Ryo") +
@@ -253,14 +250,13 @@ lfc_minutes %>%
     text = element_text(family = "Roboto Condensed"),
     panel.grid.minor.y = element_blank()) +
   geom_label(
-    data = annotation_df,
     aes(x = 20, y = 0.87, 
         hjust = 0.5,
         label = glue("
           Encouraging to see Liverpool buying players both in 
           their prime and regulars in their previous teams. 
           Our entire best 'Starting XI' are going to be 
-          in their prime coming into this season!
+          in their prime this season!
           "), 
         family = "Roboto Condensed"))
 

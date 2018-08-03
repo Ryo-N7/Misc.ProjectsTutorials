@@ -204,6 +204,16 @@ prefectures_raw <- url %>%
 ```{r tidy}
 glimpse(prefectures_raw)
 
+library(dplyr)
+library(tidyr)
+library(geofacet)
+library(ggplot2)
+library(scales)
+library(stringr)
+library(purrr)
+library(broom)
+library(glue)
+
 # spread/gather
 
 pref_pop_hist <- prefectures_raw %>% 
@@ -214,8 +224,36 @@ pref_pop_hist <- prefectures_raw %>%
          prefectures = prefectures %>% str_replace_all("-.*", ""),
          prefectures = prefectures %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
   arrange(year) %>% 
-  glimpse()
+  left_join(jp_prefs_grid1, by = c("prefectures" = "name")) %>% 
+  select(prefectures, year, population, region = name_region) %>% 
+  nest(-region) %>% 
+  mutate(fit = map(data, ~lm(population ~ year, data = .)),
+         result = map(fit, glance)) %>% 
+  unnest(result)
+  
+pref_pop_hist %>%   
+  ggplot(
+    aes(x = year, y = population)) +
+  geom_line(color = "black") +
+  geom_smooth(aes(group = region, x = year, y = population), method = "lm", 
+              formula = y ~ x) +
+  facet_geo(~prefectures, grid = "jp_prefs_grid1", scales = "free_y") +
+  theme_bw() +
+  theme(
+    title = element_text(size = 20),
+    axis.text = element_text(size = 6),
+    axis.title = element_blank(),
+    panel.grid.minor.y = element_blank()
+  ) +
+  labs(
+    title = "Japan Population Growth 1980-2010",
+    subtitle = "Data in 5-year intervals, Population in Millions",
+    caption = "Source: Census of Japan via Wikipedia"
+  ) -> jjjj
+```
 
+
+```{r}
 # fix names for some prefectures with elongated vowels!!
 
 # "Hokkaido" doesn't work as the "o" is elongated!
@@ -230,29 +268,28 @@ pref_names %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")  # NOICE.gif
 
 
 ```{r fig.height=10, fig.width=20}
-library(geofacet)
-library(ggplot2)
 
 jhist <- pref_pop_hist %>% 
   rename(name = prefectures) %>% 
+  mutate(population = population / 1000000) %>% 
   ggplot(
     aes(x = year, y = population)) +
   geom_line(color = "black") +
   scale_x_continuous(
     labels = function(x) paste0("'", substr(x, 3, 4), "s")) +
   # change pop values to in millions?
-  #scale_y_continuous(labels = function(x) paste0(substr(x, 1, 2), "M")) +
+  scale_y_continuous(labels = glue("{population}M"))
   facet_geo(~name, grid = "jp_prefs_grid1", scales = "free_y") +
   theme_bw() +
   theme(
     title = element_text(size = 20),
     axis.text = element_text(size = 6),
     axis.title = element_blank(),
-    panel.grid.minor = element_blank()
+    panel.grid.minor.y = element_blank()
   ) +
   labs(
     title = "Japan Population Growth 1980-2010",
-    subtitle = "Data in 5-year intervals",
+    subtitle = "Data in 5-year intervals, Population in Millions",
     caption = "Source: Census of Japan via Wikipedia"
   )
 

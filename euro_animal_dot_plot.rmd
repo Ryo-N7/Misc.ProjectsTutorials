@@ -1,0 +1,134 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 1, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+http://www.maartenlambrechts.com/2018/07/31/beasts-of-europe.html
+
+
+
+```{r}
+library(eurostat)  # eurostat data
+library(dplyr) # tidy data transformation
+library(sf)        # simple features GIS
+library(lwgeom)
+library(ggplot2)
+library(png)
+
+```
+
+eurostat spatial data
+
+```{r}
+
+#NUTS2 regions
+eu_nuts2_sf <- get_eurostat_geospatial(output_class = 'sf',
+                                       resolution = '60', nuts_level = 2)
+#NUTS1 regions
+eu_nuts1_sf <- get_eurostat_geospatial(output_class = 'sf',
+                                       resolution = '60', nuts_level = 1)
+
+#Replace NUTS2 regions with NUTS1 for the countries that don't have data on NUTS2 level
+nuts2.filt <- filter(eu_nuts2_sf, !(CNTR_CODE %in% c("FR", "DE", "UK")))
+
+nuts1.filt <- filter(eu_nuts1_sf, CNTR_CODE %in% c("FR", "DE", "UK"))
+
+nuts <- rbind(nuts2.filt, nuts1.filt)
+
+```
+
+divide european continent into 150x150 cell grid
+
+```{r}
+euro_grid <- nuts %>% 
+  st_make_grid(n = 150)
+```
+
+animal data
+
+```{r}
+eu.anim.raw <- get_eurostat("agr_r_animal", stringsAsFactors = FALSE)
+
+animalcodes <- c("A2000", "A2400", "A3100", "A4100", "A4200")
+animalnames <- c("cow", "buffalo", "pig", "sheep", "goat")
+cols <- c("#308F5A", "#E3D556", "#BB40BF", "#4172ED", "#D6753D")
+
+#We loop over the 5 species of animals, generating a map for each
+for (nml in 1:5) {
+  #Some regions don't have data for 2017, so then we take data from 2016
+  eu.species.17 <- filter(eu.anim.raw,
+                          animals == animalcodes[nml],
+                          time == "2017-01-01")
+  
+  eu.species.16 <- filter(eu.anim.raw,
+                          animals == animalcodes[nml],
+                          time == "2016-01-01")
+  
+  missingin17 <- filter(eu.species.16, !(geo %in% eu.species.17$geo))
+  
+  eu.animals <- rbind(eu.species.17, missingin17)
+  
+  # prepare data and plot bubble-grid-map of EU population numbers
+nutsdots <- nuts %>%
+  # join livestock data with geodata
+  left_join(y = eu.animals,
+            by = c('id' = 'geo')) %>%
+  select(values) %>%
+  # calculate average herd size in each grid cell while preserving
+  # the observed total (extensive = TRUE)
+  st_interpolate_aw(to = euro_grid, extensive = TRUE) %>%
+  # return centroid coordinates for each grid cell
+  st_centroid() %>%
+  cbind(st_coordinates(.)) %>%
+  # arrange by value to plot lowest values first so that
+  # larger bubbles sit on top of smaller ones
+  arrange(values) %>%
+  #filter out cells with missing data
+  filter(!is.na(values))
+
+#animal icons, that will go in the top left corner of the maps
+  animal.img <- readPNG(paste(animalnames[nml], '-icon.png', sep = ""))
+
+# draw a dot at each grid cell and scale its area
+  ggplot(data = nuts) +
+  #faint land silhouettes in the back of the map
+  geom_sf(fill = "grey98", color = NA) +
+  geom_sf(data = nutsdots, aes(size = values),
+          shape = 21, color = 'white', fill = cols[nml], show.legend = FALSE) +
+  #Equal area projection for Europe, and map boundaries
+  coord_sf(xlim = c(2000000, 6000000), ylim =c(950000, 5000000), crs = 3035) +
+  #Add the animal icon
+  annotation_raster(animal.img, xmin = 2000000, xmax = 2500000, ymin = 4700000, ymax = 5200000) +
+  #Ensures circles are sized by area
+  scale_size_area(max_size = 8) +
+  theme_minimal() +
+  theme(axis.text = element_blank(), panel.grid = element_line(size = 0))
+
+  ggsave(paste(animalnames[nml], "-bubblegrid-test.png", sep = ""), units = "cm", width = 20, height = 20)
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

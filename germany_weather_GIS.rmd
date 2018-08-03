@@ -1,0 +1,42 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "July 26, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+http://bigdata-doctor.com/turning-rstat-into-gis-mapping-weather-germany/
+
+```{r}
+library(jsonlite)
+
+plz.ort.de <- read.csv(file = "data/plzgeo.csv")
+
+weather.de<-NULL
+
+for (i in 1:nrow(plz.ort.de))
+{
+  url<-paste0('http://api.openweathermap.org/data/2.5/weather?lat=',plz.ort.de[i,]$lat, '&lon=',plz.ort.de[i,]$lon,'&units=metric&APPID=4be25bc10aa21df08499eb6dd89ee30a')
+  weather.entry<-jsonlite::fromJSON(url,simplifyMatrix = F,simplifyDataFrame = F,flatten = T)
+  temperature<-weather.entry$main$temp
+  humidity<-weather.entry$main$humidity
+  wind.speed<-weather.entry$wind$speed
+  wind.deg<-weather.entry$wind$deg
+  snow<-weather.entry$snow$`3h`
+  if (is.null(wind.speed)){ wind.speed<-NA}
+  if (is.null(wind.deg)){ wind.deg<-NA}
+  if (is.null(snow)){ snow<-NA}
+  if (is.null(humidity)){ humidity<-NA}
+  if (is.null(temperature)){ temperature<-NA}
+  weather.de<-rbind(data.frame(plz=plz.ort.de[i,]$plz,temperature,humidity,wind.speed,wind.deg,snow),weather.de)  
+#you might want to take your process to sleep for some milliseconds to give the API a breath
+}
+
+```
+

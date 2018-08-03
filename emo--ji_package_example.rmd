@@ -1,0 +1,47 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "July 26, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Emoji
+
+
+
+```{r}
+  library(dplyr)
+  library(tidyr)
+  library(rtweet)
+  library(tidytext)
+  library(emo)
+```
+
+```{r}
+res <- get_timeline(
+  "_ColinFay",
+  n = 30
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
