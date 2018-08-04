@@ -17,7 +17,9 @@ library(jpndistrict)
 library(sf)
 library(ggimage)
 library(ggplot2)
-
+library(dplyr)
+library(tidyr)
+library(purrr)
 ```
 
 ```{r}
@@ -58,8 +60,6 @@ p_base
 
 
 ```{r}
-library(tidyverse)
-
 sf_ja <- 1:47 %>% magrittr::extract(-13) %>% 
     map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
     reduce(rbind) %>% 
@@ -113,20 +113,123 @@ p
 
 
 
+```{r}
+ggplot(sf_pref13) +
+  geom_sf()
+```
+
+# kyushu
 
 
+```{r}
+
+jpnprefs %>% glimpse()
+jpnprefs %>% 
+  select(region) %>% 
+  unique() %>% 
+  mutate(region = region %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT"))
 
 
+library(Nippon)
 
 
+jpnprefs %>% 
+  select(region) %>% 
+  unique() %>% 
+  mutate(region = region %>% kakasi())
+
+kyushu_code <- jpnprefs %>% 
+  filter(region == "九州") %>% 
+  pull(jis_code)
+
+sf_kyushu <- kyushu_code %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+sf_kyushu %>% 
+  ggplot() +
+  geom_sf()
+
+```
+
+## Pomological fill == population
+
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggpomological)
+library(scales)
+library(rvest)
+library(stringr)
+
+url <- "https://en.wikipedia.org/wiki/List_of_Japanese_prefectures_by_population"
+
+prefectures_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("#mw-content-text > div > table:nth-child(16)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+pref_pop_hist <- prefectures_raw %>% 
+  gather(key = "year", value = "population", - Prefectures) %>% 
+  janitor::clean_names() %>% 
+  mutate(year = year %>% str_replace_all("Oct 1,\n", "") %>% as.numeric(),
+         population = population %>% str_replace_all(",", "") %>% as.numeric(),
+         prefectures = prefectures %>% str_replace_all("-.*", ""),
+         prefectures = prefectures %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
+  arrange(year) %>% 
+  left_join(geofacet::jp_prefs_grid1, by = c("prefectures" = "name"))
+
+# kyushu jis code
+kyushu_code <- jpnprefs %>% 
+  filter(region == "九州") %>% 
+  pull(jis_code)
+
+# kyushu geometries
+sf_kyushu <- kyushu_code %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+# filter year 2010
+pref_pop_2010 <- pref_pop_hist %>% 
+  select(-code, -name_abb, -col, -row) %>% 
+  filter(year == 2010)
+
+# combine with sf geometries
+pref_pop_kyushu <- pref_pop_2010 %>% 
+  filter(name_region == "Kyushu / Okinawa") %>% 
+  filter(prefectures != "Okinawa") %>% 
+  left_join(sf_kyushu, by = c("code_pref_jis" = "jis_code"))
+
+# PLOT
+ggplot(pref_pop_kyushu) +
+  geom_sf(aes(fill = population), alpha = 0.75, color = NA) +
+  geom_sf(aes(fill = population), alpha = 1, fill = NA) +
+  scale_fill_gradient(
+    low = muted(ggpomological:::pomological_palette[1], l = 90, c = 70),
+    high = ggpomological:::pomological_palette[1]) +
+  scale_color_gradient(
+    low = muted(ggpomological:::pomological_palette[1], l = 90, c = 70),
+    high = ggpomological:::pomological_palette[1],
+    guide = FALSE) +
+  theme_pomological_plain()
+
+```
 
 
+scales::mute()   mute color from a palette/grid
+--->>> l: luminance, c: chroma
+--->>> 
 
-
-
-
-
-
+palettes: nord, wes anderson, ghibli, dutchmasters, ochre, palettetown
 
 
 
