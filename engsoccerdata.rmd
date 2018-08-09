@@ -1,0 +1,75 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 9, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(engsoccerdata)
+```
+
+
+
+
+
+
+```{r}
+LIV_raw <- rbind(england, england_current()) %>% 
+  filter(Season %in% c(1992:2015)) %>% 
+  filter(home == "Liverpool" | visitor == "Liverpool") 
+
+LIV <- LIV_raw %>% 
+  janitor::clean_names() %>% 
+  mutate(totalpts = 3*sum(gf>ga) + sum(gf == ga))
+
+glimpse(LIV)
+
+
+glimpse(england_current())
+
+seasons <- 1992:2017
+
+epl_standings_list <- seasons %>% 
+  map(~ maketable(df = england, Season = .x, tier = 1, pts = 3)) %>% 
+  set_names(seasons)
+
+epl_standings_list$`1992`$Pts
+
+epl_standings_list$`1992` %>% filter(Pts == max(Pts))
+
+
+prem_winners <- map_df(epl_standings_list, ~ .x %>% filter(Pts == max(Pts)))
+
+
+bind_rows(epl_standings_list, .id = "season") %>% 
+  filter(Pos == "1") %>% 
+  glimpse()
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+

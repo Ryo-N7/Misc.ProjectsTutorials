@@ -1,0 +1,145 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 6, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Uribo: https://gist.github.com/uribo/3df84211cc48b50ec11655e17ea27ee1
+
+# packages
+
+```{r}
+devtools::install_git(
+  "https://gitlab.com/uribo/jmastats"
+)
+
+remotes::install_github("ropensci/rnaturalearth")
+remotes::install_github("ropensci/rnaturalearthhires")
+
+
+
+library(jmastats)
+library(tidyverse)
+library(sf)
+quartzFonts(ipa = quartzFont(rep("IPAPGothic", 4)))
+theme_set(theme_classic(base_size = 12, base_family = "IPAPGothic"))
+```
+
+
+
+grab station data
+
+```{r}
+set.seed(125)
+
+glimpse(stations)
+
+
+df_target_stations <- stations %>% 
+  filter(station_type %in% c("四")) %>% 
+  filter(block_no != "0092") %>% 
+  group_by(pref_code, area) %>% 
+  sample_n(1) %>% 
+  ungroup() %>% 
+  select(pref_code, area, station_name, block_no)
+
+glimpse(df_target_stations)
+
+plot(stations)
+plot(df_target_stations)
+
+df_targets <- purrr:::map2_dfr(
+  .x = df_target_stations$block_no %>% set_names(),
+  .y = df_target_stations$station_name,
+  ~ jma_collect(item = "hourly",
+                block_no = .x,
+                year = 2018,
+                month = 7,
+                day = 31) %>% 
+    
+    select(date, time, starts_with(enc2native("temperature"))) %>% 
+    parse_unit() %>% 
+    mutate(station = .y),
+  .id = "block_no")
+
+# Mangling the following names: temperature_(<U+2103>) -> temperature_(<U+2103>). Use enc2native() to avoid the warning. Error in mutate_impl(.data, dots) : 
+#  Evaluation error: variable 'temperature_(<U+2103>)' not found.
+
+
+
+weather_dat <- jma_collect(item = "hourly",
+                           block_no = "0010",
+                           year = 2018,
+                           month = 7,
+                           day = 31)
+
+
+df_temperature_summary <- df_targets %>% 
+  group_by(block_no, station) %>% 
+  summarize_at(.vars = vars(temperature), .funs = funs(min, max), na.rm = TRUE) %>% 
+  ungroup() %>% 
+  left_join(stations %>% 
+              st_set_geometry(NULL) %>% 
+              select(block_no, area), by = "block_no")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(kokudosuuchi)
+
+
+kawagawa <- getKSJURL("W05", prefCode = 3, fiscalyear = 2000:2010)
+
+glimpse(KSJPrefCodes)
+d <- getKSJData("http://nlftp.mlit.go.jp/ksj/gml/data/P12/P12-14/P12-14_06_GML.zip",
+                cache_dir = "cached_zip")
+
+d2 <- d %>% 
+  purrr::reduce(rbind) %>% glimpse()
+plot(d2)
+plot(kawagawa)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

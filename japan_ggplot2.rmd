@@ -234,5 +234,221 @@ palettes: nord, wes anderson, ghibli, dutchmasters, ochre, palettetown
 
 
 
+# fill pop by region
 
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(ggpomological)
+library(scales)
+library(rvest)
+library(stringr)
+
+url <- "https://en.wikipedia.org/wiki/List_of_Japanese_prefectures_by_population"
+
+prefectures_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("#mw-content-text > div > table:nth-child(16)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+pref_pop_hist <- prefectures_raw %>% 
+  gather(key = "year", value = "population", - Prefectures) %>% 
+  janitor::clean_names() %>% 
+  mutate(year = year %>% str_replace_all("Oct 1,\n", "") %>% as.numeric(),
+         population = population %>% str_replace_all(",", "") %>% as.numeric(),
+         prefectures = prefectures %>% str_replace_all("-.*", ""),
+         prefectures = prefectures %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT")) %>% 
+  arrange(year) %>% 
+  left_join(geofacet::jp_prefs_grid1, by = c("prefectures" = "name"))
+
+# japan ALL geometry
+sf_ja <- 1:47 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+# filter year 2010
+pref_pop_2010 <- pref_pop_hist %>% 
+  select(-code, -name_abb, -col, -row) %>% 
+  filter(year == 2010) %>% 
+  mutate(code_pref_jis = code_pref_jis %>% str_replace("^0", "")) 
+
+# combine with sf geometries
+pref_pop <- sf_ja %>% 
+  left_join(pref_pop_2010, by = c("jis_code" = "code_pref_jis"))
+
+
+pref_pop_region <- pref_pop %>% 
+  group_by(name_region) %>% 
+  mutate(pop_mean = mean(population)) %>% 
+  summarize(geometry = st_union(geometry))
+
+
+preppopregion <- pref_pop %>% 
+  group_by(name_region) %>% 
+  summarize(geometry = st_union(geometry))
+
+plot(preppopregion)
+
+st_combine(pref_pop)
+
+summary(pref_pop)
+
+preppopregion <- pref_pop %>% 
+  st_cast("MULTIPOLYGON") %>% # change all to MULTIPOLYGON
+  group_by(name_region) %>% 
+  summarize(geometry = st_union(geometry),
+            pop_mean = mean(population))
+
+```
+
+
+```{r}
+# PLOT
+
+library(nord)
+
+nord_palettes
+
+ggplot(preppopregion) +
+  geom_sf(aes(fill = pop_mean), alpha = 0.75, color = NA) +
+  geom_sf(aes(fill = pop_mean), alpha = 1, fill = NA) +
+  scale_fill_gradient(
+    low = muted(nord_palettes[[3]], l = 90, c = 70),
+    high = nord_palettes[[3]]) +
+  scale_color_gradient(
+    low = muted(nord_palettes[[3]], l = 90, c = 70),
+    high = nord_palettes[[3]],
+    guide = FALSE) +
+  theme_pomological_plain()
+
+nord_show_palette("lumina")
+```
+
+
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(rvest)
+library(nord)
+library(scales)
+library(ggpomological)
+
+# geometries for Japanese prefectures
+sf_ja <- 1:47 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01)
+
+sf_ja <- sf_ja %>% mutate(jis_code = jis_code %>% as.numeric())
+
+
+
+
+# prefecture meta data (major island, regions, etc.)
+jpnprefs2 <- jpndistrict::jpnprefs %>% 
+  left_join(geofacet::jp_prefs_grid1, by = c("jis_code" = "code_pref_jis")) %>% 
+  select(-prefecture, prefecture_name = name) %>% 
+  mutate(jis_code = jis_code %>% str_replace("^0", "") %>% as.numeric()) %>% 
+  as_tibble() 
+
+# web scrape prefecture population data
+url <- "https://en.wikipedia.org/wiki/List_of_Japanese_prefectures_by_population"
+
+prefectures_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("#mw-content-text > div > table:nth-child(16)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+pref_pop_2010 <- prefectures_raw %>% 
+  gather(key = "year", value = "population", - Prefectures) %>% 
+  janitor::clean_names() %>% 
+  mutate(
+    year = year %>% str_replace_all("Oct 1,\n", "") %>% as.numeric(),
+    population = population %>% str_replace_all(",", "") %>% as.numeric(),
+    prefectures = prefectures %>% str_replace_all("-.*", "") %>% trimws()) %>% 
+  ## TRIM WHITESPACE
+  filter(year == 2010) %>% 
+  filter(!prefectures == "Japan") %>% 
+  mutate(jis_code = c(1:47))
+
+
+# each dataframe into single lits
+j_dataframes <- list(sf_ja, jpnprefs2, pref_pop_2010)
+
+# reduce >> left-join and cast as MULTIPOLYGON so can summarize the geometries properly
+j_pop <- j_dataframes %>% 
+  reduce(left_join) %>% 
+  st_cast("MULTIPOLYGON") %>%
+  group_by(major_island) %>% 
+  summarize(geometry = st_union(geometry),
+            pop_mean = mean(population))
+
+# place island label on st_centroid()
+j_pop %>% 
+  st_centroid() %>% 
+  st_coordinates() %>% View()
+
+j_pop <- j_pop %>% 
+  mutate(
+    centroid = map(geometry, st_centroid),
+    coords = map(centroid, st_coordinates),
+    coord_x = map_dbl(coords, 1),
+    coord_y = map_dbl(coords, 2)) %>% 
+  select(-centroid, - coords)
+
+# PLOT
+ggplot(j_pop) +
+  geom_sf(aes(fill = pop_mean), alpha = 0.75, color = NA) +
+  geom_sf(aes(fill = pop_mean), alpha = 1, fill = NA, color = "red") +
+  geom_text(aes(coord_x, coord_y, label = major_island)) +
+  scale_fill_gradient(
+    low = muted(nord_palettes[[7]][2], l = 90, c = 70),
+    high = nord_palettes[[7]][2]) +
+  scale_color_gradient(
+    low = muted(nord_palettes[[7]][2], l = 90, c = 70),
+    high = nord_palettes[[7]][2],
+    guide = FALSE) +
+  theme_pomological_plain() +
+  theme(axis.title = element_blank())
+
+nord_show_palette()
+nord_palettes[[7]][2]
+```
+
+
+
+
+```{r}
+
+nc <- st_read(system.file("shape/nc.shp", package="sf"), quiet = TRUE)
+# add an arbitrary grouping variable
+nc_groups <- nc %>% 
+  mutate(group = sample(LETTERS[1:3], nrow(.), replace = TRUE))
+# average area by group
+nc_mean_area <- nc_groups %>% 
+  group_by(group) %>% 
+  summarise(area_mean = mean(AREA))
+# plot
+ggplot(nc_mean_area) +
+  geom_sf(aes(fill = area_mean)) +
+  scale_fill_distiller("Area", palette = "Greens") +
+  ggtitle("Mean area by group") +
+  theme_bw()
+```
 

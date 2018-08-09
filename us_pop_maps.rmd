@@ -1,0 +1,110 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 9, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+library(magrittr)
+library(jpndistrict)
+library(sf)
+library(ggimage)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(stringr)
+library(rvest)
+library(nord)
+library(scales)
+library(ggpomological)
+```
+
+
+
+```{r}
+states_sf <- tigris::states(cb = TRUE) %>% 
+  st_as_sf() %>% glimpse()
+
+spData::us_states %>% pull(NAME) %>% unique() #--- Postal abbrv same as ISO
+ggmap::get_map()
+acs::fips.state 
+us_states %>% glimpse()
+  
+
+us_states_raw <- spData::us_states
+
+glimpse(us_states_raw)
+
+
+us_states_df <- us_states_raw %>% 
+  janitor::clean_names()
+
+
+glimpse(us_states_df)
+```
+
+
+# by state
+
+```{r}
+us_states_df %>% 
+  mutate(
+    centroid = map(geometry, st_centroid),
+    coords = map(centroid, st_coordinates),
+    coord_x = map_dbl(coords, 1),
+    coord_y = map_dbl(coords, 2)) %>% 
+  select(-centroid, - coords) %>% 
+  ggplot() +
+  geom_sf(aes(fill = total_pop_15), color = NA, alpha = 0.75) +
+  geom_sf(aes(fill = total_pop_15), color = NA, alpha = 1) +
+  geom_label(aes(coord_x, coord_y, label = name), size = 3)
+```
+
+
+
+
+
+# by region
+
+```{r}
+us_states_df %>% 
+  group_by(region) %>% 
+  summarize(mean_pop = mean(total_pop_15),
+            geometry = st_union(geometry)) %>% 
+  mutate(
+    centroid = map(geometry, st_centroid),
+    coords = map(centroid, st_coordinates),
+    coord_x = map_dbl(coords, 1),
+    coord_y = map_dbl(coords, 2)) %>% 
+  select(-centroid, - coords) %>% 
+  ggplot() +
+  geom_sf(aes(fill = mean_pop), color = NA, alpha = 0.75) +
+  geom_sf(aes(fill = mean_pop), color = NA, alpha = 1) +
+  geom_label(aes(coord_x, coord_y, label = region))
+
+  
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

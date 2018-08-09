@@ -96,6 +96,8 @@ resultados %>%
 # NOICE.gif
 glimpse(results_comb)
 
+age_plus_one <- c("Lovren", "Van Dijk", "Moreno", "Ings")
+
 # fix "strings" into proper formats, calculate % of minutes appeared
 lfc_minutes <- results_comb %>% 
   
@@ -116,7 +118,14 @@ lfc_minutes <- results_comb %>%
       first_name == "Trent" ~ "Alexander-Arnold",   
       first_name == "Virgil" ~ "Van Dijk",
       first_name == "Alex" ~ "Oxlade-Chamberlain",
-      TRUE ~ last_name)) %>% 
+      TRUE ~ last_name),
+    age = age + 1) %>%    # do CURRENT age instead for plot 2.0
+  
+  mutate(
+    age = case_when(
+      last_name %in% age_plus_one ~ age + 1,
+      TRUE ~ age)
+    ) %>% 
   
   # can't be arsed to scrape them individually so manually add the new lads
   add_row(
@@ -241,24 +250,25 @@ lfc_minutes %>%
   scale_x_continuous(
     breaks = pretty_breaks(n = 10)) +
   labs(
-    x = "Age (Beginning of 17/18 Season)", y = "% of Minutes Played", 
+    x = "Current Age (As of Aug. 5th, 2018)", y = "% of Minutes Played", 
     title = "Liverpool FC: Age-Utility Matrix",
-    subtitle = "Premier League 17/18 (Summer 2018 transfers in bold)",
+    subtitle = "Premier League 17/18 (Summer 2018 transfers in bold, departed players left in for comparison)",
     caption = "Data from transfermarkt.com\nInspired by @FinerMargins\nBy @R_by_Ryo") +
   theme_bw() +
   theme(
     text = element_text(family = "Roboto Condensed"),
     panel.grid.minor.y = element_blank()) +
   geom_label(
-    aes(x = 20, y = 0.87, 
-        hjust = 0.5,
+    aes(x = 20.5, y = 0.87, 
+        hjust = 0.5, 
         label = glue("
           Encouraging to see Liverpool buying players both in 
           their prime and regulars in their previous teams. 
           Our entire best 'Starting XI' are going to be 
           in their prime this season!
           "), 
-        family = "Roboto Condensed"))
+        family = "Roboto Condensed"),
+    size = 3.5)
 
 ```
 
