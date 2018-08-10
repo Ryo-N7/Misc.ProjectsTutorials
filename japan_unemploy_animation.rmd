@@ -1,0 +1,64 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 10, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+library(dplyr)
+library(tidyquant)
+library(tidyr)
+library(purrr)
+
+```
+
+
+
+
+# https://fred.stlouisfed.org/series/LRUN64TTJPM156S
+
+```{r}
+jp_unemploy <- tq_get("LRUNTTTTJPM156S", 
+                      get = "economic.data", from = "1970-01-01") %>% 
+  rename(unemployment_rate = price)
+
+
+
+
+
+```
+
+
+by prefecture?
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

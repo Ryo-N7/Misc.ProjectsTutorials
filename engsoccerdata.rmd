@@ -65,6 +65,79 @@ bind_rows(epl_standings_list, .id = "season") %>%
 
 
 
+```{r}
+# grab manager list
+library(polite)
+library(rvest)
+
+session <- bow("https://en.wikipedia.org/wiki/List_of_Liverpool_F.C._managers")
+
+print(session)
+# good to go!
+#//*[@id="mw-content-text"]/div/table[2]
+
+library(lubridate)
+
+lfc_managers_raw <- scrape(session) %>% 
+  html_nodes(xpath = "//*[@id='mw-content-text']/div/table[2]") %>% 
+  html_table(fill = TRUE, header = TRUE) %>% 
+  flatten() %>% 
+  as_tibble() %>% 
+  slice(-1) %>% 
+  select(Name, From, To)
+
+lfc_managers_clean <- lfc_managers_raw %>% 
+  janitor::clean_names() %>% 
+  mutate(name = case_when(
+    str_detect(name, "William") ~ "William Edward Barclay, John McKenna",
+    str_detect(name, "EvansG") ~ "Roy Evans, Gerard Houllier",
+    TRUE ~ name)) %>% 
+  mutate(name = str_replace_all(name, "\\*", "")) %>% 
+  mutate(from = parse_date_time(from, orders = "%d/%m/%Y"))
+
+```
+
+
+
+
+```{r}
+library(colorr)
+library(ggimage)
+library(gganimate)
+
+seasons <- 1992:2016
+
+lfc_standings_list <- seasons %>% 
+  map(~ maketable(df = england, Season = .x, tier = 1, pts = 3)) %>% 
+  set_names(seasons) %>% 
+  bind_rows(., .id = "season") %>% 
+  filter(team == "Liverpool") %>% 
+  mutate_at(vars(-matches("team")), as.numeric)   # all cols except team == numeric!
+
+glimpse(lfc_standings_list)
+
+lfc_logo <- 
+  data.frame(image = "https://upload.wikimedia.org/wikipedia/en/0/0c/Liverpool_FC.svg")
+
+
+lfc_standings_list %>% 
+  ggplot(aes(season, Pos, group = team)) +
+  geom_path() +
+  geom_image(aes(season, Pos, image = lfc_logo$image), size = 0.035) +
+  scale_y_reverse(limits = c(22, 1), expand = c(0, 0), 
+                  breaks = c(1, 2, 3, seq(4, 22, by = 2))) +   
+  # need to reverse LIMITS as well!
+  scale_x_continuous(breaks = scales::pretty_breaks(10)) +
+  geom_hline(yintercept = 4, color = "green") +
+  geom_hline(yintercept = 20, color = "red") +
+  theme_bw() +
+  transition_time(time = season)
+
+
+# add managerial stints in differnt color shades >>> geom_rect()?
+
+```
+
 
 
 
