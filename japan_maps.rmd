@@ -114,6 +114,21 @@ ggplot(df.jp.prefs, aes(x = x, y = y, group = id)) +
       geom_point() +
       coord_fixed(ratio = 1) +
       theme_map()
+
+library(hexamapmaker)
+df.jp.prefs <- fix_shape(df.jp.prefs)
+df.jp.prefs.hex <- make_polygons(df.jp.prefs)
+
+(p <- ggplot(df.jp.prefs.hex, aes(x, y, group = id)) +
+    geom_polygon(fill = "white", colour = "black", show.legend = FALSE) +
+    coord_fixed(ratio = 1) +
+    theme_map())
+
+add_hexalabel(zz = df.jp.prefs.hex, p)
+
+
+
+
 ```
 
 
@@ -295,5 +310,250 @@ jhist <- pref_pop_hist %>%
 
 ggsave(jhist, filename = "japopop.png", height = 10, width = 20)
 
+```
+
+
+
+sf transitions morph
+
+
+```{r}
+library(gganimate) # thomasp85/gganimate
+library(cartogram)
+library(geogrid) # devtools::install_github("jbaileyh/geogrid") >>> for sf support!
+library(rnaturalearth)
+library(sf)
+library(scico)
+library(jpndistrict)
+library(dplyr)
+library(purrr)
+library(rvest)
+library(stringr)
+library(tidyr)
+```
+
+
+
+
+```{r}
+sf_ja <- 1:47 %>% 
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.001) %>% 
+    mutate(jis_code = as.numeric(jis_code))
+```
+
+add in pop data.
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/List_of_Japanese_prefectures_by_population"
+
+prefectures_raw <- url %>% 
+  read_html() %>% 
+  html_nodes("#mw-content-text > div > table:nth-child(16)") %>% 
+  .[[1]] %>% 
+  html_table()
+
+pref_pop_hist <- prefectures_raw %>% 
+  gather(key = "year", value = "population", - Prefectures) %>% 
+  janitor::clean_names() %>% 
+  mutate(year = year %>% str_replace_all("Oct 1,\n", "") %>% as.numeric(),
+         population = population %>% str_replace_all(",", "") %>% as.numeric(),
+         prefectures = prefectures %>% str_replace_all("-.*", ""),
+         prefectures = prefectures %>% iconv(from = "UTF-8", to = "ASCII//TRANSLIT") %>%
+           trimws()) %>% 
+  arrange(year) %>% 
+  left_join(geofacet::jp_prefs_grid1, by = c("prefectures" = "name")) %>% 
+  select(-col, -row, -name_region, -code_pref_jis)
+
+pref_2010_pop <- pref_pop_hist %>% 
+  filter(year == 2010) %>% 
+  filter(prefectures != "Japan")
+
+# COMBINE
+sf_ja_pop <- sf_ja %>% 
+  left_join(pref_2010_pop, by = c("jis_code" = "code")) %>% 
+  # change CRS to 3395 for cartogram to work, may be the reason that
+  # everything else gets screwed up though??
+  # +init=epsg:3395
+  st_transform(crs = "+proj=laea +lat_0=35 +lon_0=139") %>%   
+  st_cast("MULTIPOLYGON")
+
+
+```
+
+
+# original non-altered
+
+```{r}
+sf_ja_pop %>% 
+  ggplot() +
+  geom_sf(aes(fill = population))
+```
+
+
+
+```{r hokkaido}
+sf_ja %>% 
+  filter(jis_code == "1") %>% 
+  ggplot() +
+  geom_sf()
+```
+
+hmmm.... are we seriously still going "KURIL IS JAPANESE CLAY?!"
+
+
+# Calculate grids!
+
+
+```{r}
+
+ja_hex <- calculate_grid.sf(shape = sf_ja_pop, grid_type = "hexagonal", seed = 1)
+# must install github version for sf support!
+
+sf_hex_ja <- assign_polygons.sf(sf_ja_pop, ja_hex)
+
+sf_hex_ja %>% 
+  ggplot() + geom_sf(aes(fill = population, group = prefectures))
+
+# adds in the Kurils
+
+```
+
+
+# squares
+
+```{r}
+ja_sq <- calculate_grid(sf_ja_pop, grid_type = "regular", seed = 2)
+sf_sq_ja <- assign_polygons.sf(sf_ja_pop, ja_sq)
+
+sf_sq_ja %>% 
+  ggplot() +
+  geom_sf(aes(fill = population, group = prefectures)) + 
+  coord_sf(datum = NA)
+
+```
+
+
+
+```{r}
+# st_transform(crs = "+init=epsg:3395") %>% 
+sf_carto_jp <- sf_ja_pop %>% 
+  cartogram_cont("population", itermax = 10)
+
+sf_carto_jp %>% 
+  ggplot() +
+  geom_sf(aes(fill = population, group = prefectures))
+
+```
+
+
+
+
+# COMBINE ALL
+
+
+```{r}
+types <- c(
+  'Original',
+  'Cartogram Weighted by Population',
+  'Hexagonal Tiling',
+  'Square Tiling'
+)
+
+sf_ja_pop$types <- types[1]
+sf_carto_jp$types <- types[2]
+sf_hex_ja$types <- types[3]
+sf_sq_ja$types <- types[4]
+
+japan_all <- rbind(sf_ja_pop, sf_carto_jp[, names(sf_ja_pop)], 
+                   sf_hex_ja[, names(sf_ja_pop)], sf_sq_ja[, names(sf_ja_pop)])
+
+japan_all <- japan_all %>% mutate(types = as.factor(types))
+
+glimpse(japan_all)
+
+```
+
+# plot sf transitions
+
+```{r}
+ggplot(japan_all) +
+  geom_sf(aes(fill = population, group = prefecture)) +
+  scale_fill_scico(palette = "lapaz") +
+  coord_sf(datum = NA) +
+  theme_void() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(angle = 30, hjust = 1)) +
+  labs(title = "Showing {closest_state}",
+       fill = "Population") +
+  transition_states(types, 2, 1)
+
+
+anim_save(filename = "jp_sf_transitions.gif")
+
+frames_data <- frame_vars()
+```
+
+```{r}
+glimpse(frames_data)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(gganimate) # thomasp85/gganimate
+library(cartogram)
+library(geogrid) # Need github version jbaileyh/geogrid
+library(rnaturalearth)
+library(sf)
+library(scico)
+
+us <- ne_states('united states of america', returnclass = 'sf')
+us <- us[!us$woe_name %in% c('Alaska', 'Hawaii'), ]
+us <- st_transform(us, '+proj=eqdc +lat_0=39 +lon_0=-96 +lat_1=33 +lat_2=45 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs')
+# Population data from https://www.census.gov/data/tables/2017/demo/popest/state-total.html
+pop <- read.csv('PEP_2017_PEPANNRES_with_ann.csv', header = TRUE, skip = 1, check.names = FALSE)
+us$pop <- pop[match(us$name, pop$Geography), ncol(pop)]
+
+us_ca <- cartogram_cont(us, 'pop')
+us_hex <- calculate_grid(shape = us, grid_type = "hexagonal", seed = 1)
+us_hex <- assign_polygons(us, us_hex)
+us_sq <- calculate_grid(shape = us, grid_type = "regular", seed = 13)
+us_sq <- assign_polygons(us, us_sq)
+
+types <- c(
+  'Original',
+  'Cartogram Weigted by Population',
+  'Hexagonal Tiling',
+  'Square Tiling'
+)
+us$type <- types[1]
+us_ca$type <- types[2]
+us_hex$type <- types[3]
+us_sq$type <- types[4]
+us_all <- rbind(us, us_hex[, names(us)], us_ca[, names(us)], us_sq[, names(us)])
+us_all$type <- factor(us_all$type, levels = types)
+
+ggplot(us_all) + 
+  geom_sf(aes(fill = pop, group = name)) + 
+  scale_fill_scico(palette = 'lapaz') + 
+  coord_sf(datum = NA) +
+  theme_void() + 
+  theme(legend.position = 'bottom', 
+        legend.text = element_text(angle = 30, hjust = 1)) + 
+  labs(title = 'Showing {closest_state}', 
+       fill = 'Population') +
+transition_states(type, 2, 1)
 ```
 

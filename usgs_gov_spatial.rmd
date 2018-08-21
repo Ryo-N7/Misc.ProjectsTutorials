@@ -1,0 +1,153 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 19, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## USGS >>> R Users
+## https://owi.usgs.gov/blog/beyond-basic-mapping/
+
+- HUC: hydrologic unit code
+
+```{r}
+library(sbtools)
+library(dataRetrieval)
+library(sf)
+```
+
+Western Penn shapefile (polygon)
+- watershed + gages data
+
+```{r}
+item_file_download(sb_id = "5a83025ce4b00f54eb32956b", 
+                   names = "huc8_05010007_example.zip", 
+                   destinations = "huc8_05010007_example.zip", 
+                   overwrite_file = TRUE)
+
+unzip('huc8_05010007_example.zip', overwrite = TRUE)
+#note st_read takes the folder, not a particular file
+huc_poly <- st_read('huc8_05010007_example')
+
+class(huc_poly)
+# sf and data frame
+
+str(huc_poly)
+
+st_geometry(huc_poly)
+
+st_bbox(huc_poly)
+# epsg 4326
+st_crs(huc_poly)
+
+huc_gages <- whatNWISdata(huc = "05010007", parameterCd = "00060", service="uv")
+
+head(huc_gages)
+```
+
+
+# Raster map:
+
+- use ggmap to create road/satellite map for HUC
+- location: use bbox from huc_poly with `st_bbox()`
+
+```{r}
+library(ggmap)
+library(dplyr)
+
+bbox <- magrittr::set_names(st_bbox(huc_poly), c("left", "bottom", "right", "top"))
+glimpse(bbox)
+
+basemap_streets <- get_map(maptype = "roadmap", location = bbox, zoom = 9)
+basemap_satellite <- get_map(maptype = "satellite", location = bbox, zoom = 9)
+
+street_map <- ggmap(basemap_streets)
+satellite_map <- ggmap(basemap_satellite)
+
+print(street_map)
+
+```
+
+
+- add info to base maps
+- convert huc_gages to sf object >>> `st_as_sf()` 
+
+
+```{r}
+huc_gages_sf <- st_as_sf(huc_gages, coords = c("dec_long_va", "dec_lat_va"), 
+                         crs = st_crs(huc_poly), remove = FALSE)
+# satmap
+satellite_map +
+  geom_sf(data = huc_poly,
+          inherit.aes = FALSE,
+          color = "white", fill = NA) +
+  geom_sf(data = huc_gages_sf, 
+          inherit.aes = FALSE, 
+          color = "red") +
+  geom_text(data = huc_gages_sf,
+            aes(label = site_no, 
+                x = dec_long_va, y = dec_lat_va),
+            hjust = 0, size = 2.5, nudge_x = 0.02, col = "yellow")
+
+# streetmap
+
+street_map +
+  geom_sf(data = huc_poly,
+          inherit.aes = FALSE,
+          color = "black", fill = NA) +
+  geom_sf(data = huc_gages_sf, 
+          inherit.aes = FALSE, 
+          color = "red") +
+  geom_text(data = huc_gages_sf, 
+            aes(label = site_no, 
+                x = dec_long_va, 
+                y = dec_lat_va),
+            hjust = 0, size = 2.5, nudge_x = 0.02, col = "black")
+
+
+
+
+```
+
+
+
+
+- no raster background
+- maps package
+
+```{r}
+library(maps)
+
+map(database = "state", regions = "Pennsylvania", col = "tan", fill = TRUE, border = NA)
+map(database = 'county', regions = 'Pennsylvania', col = "white", fill = FALSE, add = TRUE)
+plot(st_geometry(huc_poly), col = NA, add = TRUE)
+plot(st_geometry(huc_gages_sf), add = TRUE, col = "red", pch = 19, cex = 0.7)
+legend("bottomright", legend = c("Gage", "Subbasin boundary"), pch = c(19,NA), lty = c(NA, 1),
+       col = c("red", "black"), title = "Legend")
+title("Conemaugh Subbasin")
+
+
+```
+
+HUC zoom
+
+```{r}
+map(database = 'county', regions = 'Pennsylvania', col = "lightgray", 
+      xlim = bbox[c('left', 'right')], ylim = bbox[c('bottom', 'top')])
+ plot(st_geometry(huc_poly), col = "dodgerblue", border = NA, add = TRUE)
+  box()
+ plot(st_geometry(huc_gages_sf), add = TRUE, col = "red", pch = 19, cex = 0.7)
+  legend("bottomleft", legend = c("Gage", "Conemaugh subbasin"), pch = c(19,NA), lty = c(NA, 1),
+       col = c("red", "dodgerblue"), title = "Legend", lwd = c(1,15), bg = "wheat")
+  text(x = huc_gages$dec_long_va, y = huc_gages$dec_lat_va, labels = huc_gages$site_no,
+       pos = 4, cex = 0.7)
+```
+
+
+
+

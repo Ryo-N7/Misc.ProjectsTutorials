@@ -95,6 +95,10 @@ lfc_managers_clean <- lfc_managers_raw %>%
   mutate(name = str_replace_all(name, "\\*", "")) %>% 
   mutate(from = parse_date_time(from, orders = "%d/%m/%Y"))
 
+
+lfc_managers_clean %>% mutate(from_year = year(from)) %>% glimpse()
+
+
 ```
 
 
@@ -137,6 +141,119 @@ lfc_standings_list %>%
 # add managerial stints in differnt color shades >>> geom_rect()?
 
 ```
+
+
+
+
+all teams
+
+```{r}
+seasons <- 1992:2016
+
+league_standings_list <- seasons %>% 
+  map(~ maketable(df = england, Season = .x, tier = 1, pts = 3)) %>% 
+  set_names(seasons) %>% 
+  bind_rows(., .id = "season") %>% 
+  mutate_at(vars(-matches("team")), as.numeric)   
+
+
+```
+
+
+```{r}
+league_standings_list %>% 
+  janitor::clean_names() %>% 
+  group_by(team) %>% 
+  summarize(avgpos = median(pos) %>% round(digits = 1)) %>% 
+  arrange(avgpos) %>% 
+  top_n(-6, wt = avgpos) %>% 
+  select(team) %>% as_vector() -> top_6
+
+league_standings_list %>% 
+  janitor::clean_names() %>% 
+  filter(season < 2000) %>% 
+  group_by(team) %>% 
+  summarize(avgpos = median(pos) %>% round(digits = 1)) %>% 
+  arrange(avgpos) %>% 
+  top_n(-6, wt = avgpos)
+  
+
+league_standings_list %>% 
+  janitor::clean_names() %>% 
+  filter(season > 2009) %>% 
+  group_by(team) %>% 
+  summarize(avgpos = median(pos) %>% round(digits = 1)) %>% 
+  arrange(avgpos) %>% 
+  top_n(-6, wt = avgpos)
+
+league_standings_list %>% 
+  janitor::clean_names() %>% 
+  group_by(team) %>% 
+  mutate(avgpos = median(pos) %>% round(digits = 1)) %>% 
+  ungroup() %>% 
+  mutate(top6 = case_when(
+    team %in% top_6 ~ TRUE,
+    TRUE ~ FALSE
+  )) %>% 
+  ggplot(aes(season, pos, group = team)) +
+  geom_path(aes(color = team)) +
+  gghighlight::gghighlight(top6 == TRUE) +
+  geom_point() +
+  scale_y_reverse(limits = c(22, 1),  
+                  breaks = c(1, 2, 3, seq(4, 22, by = 2))) +   
+  # need to reverse LIMITS as well!
+  scale_x_continuous(breaks = scales::pretty_breaks(10)) +
+  nord::scale_color_nord(palette = "moose_pond") +
+  geom_hline(yintercept = 4, color = "green") +
+  geom_hline(yintercept = 20, color = "red") +
+  theme_bw()
+
+
+```
+
+
+
+
+```{r}
+
+league_standings_list %>% 
+  janitor::clean_names() %>% 
+  group_by(team) %>% 
+  mutate(avgpos = mean(pos) %>% round(digits = 1)) %>% 
+  ggplot(aes(season, pos, group = team)) +
+  geom_path(aes(color = team), show.legend = FALSE) +
+  gghighlight::gghighlight(mean(avgpos) < 5) +
+  geom_point() +
+  scale_y_reverse(limits = c(22, 1),  
+                  breaks = c(1, 2, 3, seq(4, 22, by = 2))) +   
+  # need to reverse LIMITS as well!
+  scale_x_continuous(breaks = scales::pretty_breaks(10)) +
+  geom_hline(yintercept = 4, color = "green") +
+  geom_hline(yintercept = 20, color = "red") +
+  theme_bw()
+
+
+
+
+league_standings_list %>% 
+  ggplot(aes(season, Pos, group = team)) +
+  geom_path(show.legend = FALSE) +
+  geom_point() +
+  scale_y_reverse(limits = c(22, 1),  
+                  breaks = c(1, 2, 3, seq(4, 22, by = 2))) +   
+  # need to reverse LIMITS as well!
+  scale_x_continuous(breaks = scales::pretty_breaks(10)) +
+  geom_hline(yintercept = 4, color = "green") +
+  geom_hline(yintercept = 20, color = "red") +
+  theme_bw()
+
+
+# use geom_segment instead of hline for rel/european for different eras
+
+```
+
+
+
 
 
 
