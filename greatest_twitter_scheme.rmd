@@ -1,0 +1,89 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 27, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## https://www.garrickadenbuie.com/blog/2018/08/24/greatest-twitter-scheme/
+
+
+
+```{r}
+library(rtweet)
+library(dplyr)
+
+crb_tweets <- get_timeline("costcoricebag", n = 3200)
+
+# filter out replies and retweets
+# extract first word in tweet text
+# arrange in reverse chronological order
+
+glimpse(crb_tweets)
+
+
+first_words <- crb_tweets %>% 
+  filter(
+    !is_retweet,
+    is.na(reply_to_status_id),
+    created_at <= lubridate::ymd_hms("2018-08-23 18:43:27"),
+    created_at >= lubridate::ymd_h("2018-05-07 15"),
+    !grepl("^@", text)
+  ) %>% 
+  mutate(
+    first_word = sub("^\\W*([\\w'’]+)[\\S\\s]+", "\\1", text, perl = TRUE)
+  ) %>% 
+  arrange(desc(created_at))
+
+
+first_words %>% 
+  select(created_at, text, first_word)
+
+```
+
+tilemap of WHEN tweet for QUEEN
+
+```{r}
+first_words %>% 
+  mutate(created_at = lubridate::with_tz(created_at, tzone = "US/Central"),
+         created_day = lubridate::floor_date(created_at, "day"),
+         wday = lubridate::wday(created_at)) %>% 
+  select(created_day, wday) %>% 
+  mutate(
+    wday = factor(wday, levels = 1:7, labels = c("Su", "M", "T", "W", "Tr", "F", "Sa")),
+    week = lubridate::floor_date(created_day, "week") %>% lubridate::as_date(.)
+  ) %>% 
+  group_by(week, wday) %>% 
+  count() -> firstwordos
+
+weeks <- firstwordos %>% 
+  filter(wday == "Su") %>% 
+  pull(week)
+
+# grab every second week in sequence
+weeks <- weeks[seq_along(weeks) %% 2 == 0]
+  
+week_labels <- strftime(weeks, "%b %d")
+
+ggplot(firstwordos) + 
+  aes(week, wday, fill = n) +
+  geom_tile(width = 0.90 * 7, height = 0.90) +
+  coord_fixed(7) +
+  theme_minimal(18, base_family = "Roboto Condensed") +
+  labs(x = NULL, y = NULL) +
+  scale_x_date(expand = c(0, 0), breaks = weeks, labels = week_labels) +
+  ggsci::scale_fill_material("deep-orange") +
+  theme(
+    legend.position = "bottom",
+    panel.grid = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(hjust = 0.5),
+    plot.margin = margin(1.5, 0, 1.5, 0)
+  )
+
+```
+

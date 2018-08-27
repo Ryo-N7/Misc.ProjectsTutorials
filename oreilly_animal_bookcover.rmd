@@ -1,0 +1,66 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "August 27, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## https://masalmon.eu/2018/08/25/oreilly/
+
+
+
+
+```{r}
+library("magrittr")
+home_url <- "https://www.oreilly.com/animals.csp"
+
+session <- polite::bow(home_url,
+                       user_agent = "Maëlle Salmon https://masalmon.eu/")
+
+get_twenty <- function(offset, session){
+  # offset parameter to get all books 20 by 20
+  params <- glue::glue("?x-o={offset}")
+  
+  # scraping with content parameter
+  # cf https://github.com/dmi3kno/polite/issues/6
+  # https://www.oreilly.com/animals.csp?x-o=720 was problematic
+  # (German characters)
+  page <- polite::scrape(session, params = params, 
+                         content = "text/html;charset=iso-8859-1")
+  # get all animal rows
+  rows <- rvest::xml_nodes(page,
+                           xpath = "//div[@class='animal-row']")
+  # extract book titles
+  rows %>%
+    rvest::xml_nodes(xpath = "a[@class='book']") %>%
+    rvest::xml_nodes(xpath = "h1[@class='book-title']") %>%
+    rvest::html_text() -> book_titles
+  
+  rows %>%
+    rvest::xml_nodes(xpath = "h2[@class='animal-name']") %>%
+    rvest::html_text() -> animal_names
+  
+  tibble::tibble(book = book_titles,
+                 animal = animal_names)
+  
+}
+
+
+no_animals <- 1227 # by hand!
+
+offsets <- (0:floor(no_animals/20))*20
+
+
+```
+
+
+
+
+
+
+
+
