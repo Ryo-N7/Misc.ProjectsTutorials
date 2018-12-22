@@ -1,0 +1,111 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "September 4, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+
+df.books <- read_csv('https://github.com/zygmuntz/goodbooks-10k/raw/master/books.csv') %>%
+  mutate(first_author = map_chr(str_split(authors, ','), 1),
+         trim_title = strtrim(title, 70))
+```
+
+histogram of ratings
+
+
+
+```{r}
+df.books %>%
+  ggplot(aes(average_rating)) +
+    geom_histogram(binwidth=0.1)
+```
+
+
+
+polarization metric: measures how different readers’ ratings are. A low score means that most users rate the book about the same, while a high score means that many users rated the book high and many other users rated the book low. >>> Esteban and Ray 1994
+
+```{r}
+polarization <- function(rating, p) {
+  sum <- 0
+  for (i in seq_along(rating)) {
+    for (j in seq_along(rating)) {
+      sum <- sum + p[i] * p[j] * abs(rating[i] - rating[j])
+    }
+  }
+  sum
+}
+
+
+df.polarization <- df.books %>%
+  filter(coalesce(language_code, 'eng') %>%
+           str_detect('^en')) %>%
+  gather(rating, n, matches('^ratings_[1-5]')) %>%
+  mutate(rating = gsub('ratings_', '', rating) %>%
+           as.integer()) %>%
+  group_by(book_id) %>%
+  mutate(p = n / sum(n)) %>%
+  summarize(polarization = polarization(rating, p))
+
+df.books <- df.books %>%
+  inner_join(df.polarization, by='book_id')
+
+df.books %>%
+  arrange(desc(polarization)) %>%
+  head(100) %>%
+  select(first_author, trim_title, polarization, average_rating) %>% 
+  knitr::kable()
+
+```
+
+
+
+
+```{r}
+ df.books %>%
+  ggplot(aes(polarization, average_rating, text = paste0(first_author, ': ', trim_title))) +
+    geom_point()
+
+
+
+df.books %>%
+  group_by(first_author)  %>%
+  summarize(polarization = weighted.mean(polarization, ratings_count),
+            ratings = sum(ratings_count),
+            books = paste0(' * ', trim_title, collapse='\n')) %>%
+  ggplot(aes(ratings, -polarization, text = paste0(first_author, '\n\n', books))) +
+    geom_point() +
+    scale_x_log10()
+```
+
+
+
+
+```{r}
+highlights <- c("Bill Watterson", "Patrick Rothfuss", "George R.R. Martin", "J.R.R. Tolkien", "J.K. Rowling", "Suzanne Collins", "Stephen King", "Dan Brown", "J.D. Salinger", "Paulo Coelho", "Stephenie Meyer", "E.L. James", "Elizabeth Gilbert", "Ayn Rand", "Herman Melville", "Rhonda Byrne", "Adolf Hitler", "L. Ron Hubbard", "Sarah Palin", "Angie Thomas", "Trevor Noah", "Andy Weir", "William Shakespeare", "John Green", "Jane Austen")
+
+df.books %>%
+  group_by(first_author)  %>%
+  summarize(polarization = weighted.mean(polarization, ratings_count),
+            average_rating = weighted.mean(average_rating, ratings_count),
+            ratings = sum(ratings_count)) %>%
+  ggplot(aes(ratings, -polarization)) +
+    #geom_point(shape = 21, fill = 'black', color='white', size=3) +
+    geom_hex(bins = 70, color = 'black', size=0.2) +
+    geom_text(aes(label = ifelse(first_author %in% highlights, first_author, NA)), color='#e6e6e6', size=3, hjust = 1) +
+    scale_x_log10(labels = scales::comma) +
+    scale_fill_distiller(palette = 'GnBu') +
+    labs(x="", y="") +
+    theme(text = element_text(color = '#e6e6e6'),
+          axis.text = element_text(color = '#e6e6e6'),
+          plot.background = element_rect(fill = 'black'),
+          panel.grid.major.x = element_line(color='#555555', size=0.3),
+          panel.grid.major.y = element_line(color='#555555', size=0.3))
+```
+

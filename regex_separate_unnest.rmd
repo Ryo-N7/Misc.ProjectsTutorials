@@ -1,0 +1,92 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "September 4, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+
+dat <- tibble::tribble(
+                                     ~municipality,                                                                                            ~sex_and_collection_number,
+                                        "Alegrete", "F: TR917, 939, 959, 963, JR322–325, 333, 334, 399, 400, 413, 416/M: TR960, 964, JR320, 321, 323, 397, 398, 401, 412",
+                                  "Alegrete South",                                                                               "F: TR941, 942, 945/M: TR940, 943, 944",
+                                        "Candiota",                    "F: TR 177–180, J180, 181, 183, 207, 208, 210, 211, 212, 214–216, 218, 219, 222/M: J209, 213, 217",
+                                           "Butiá",                                                             "F: TR289, 594, J131, 170, 199, 201, 204, 205, JR591–595",
+                                      "Candelária",                                                                                                        "M: MNHNA1885",
+                                "Cachoeira do Sul",                                                                                                        "F: TR921–924"
+                          )
+
+glimpse(dat)
+dat
+
+```
+
+Place values of sex var into own column >>> split + unnesting, separate on existing delimiter.
+
+
+```{r}
+dat %>% 
+  unnest(sex_and_collection_number = strsplit(sex_and_collection_number, "\\/")) %>% 
+  separate(sex_and_collection_number, into = c("sex", "specimen"), sep = ": ") -> dat
+```
+
+REGEX:
+
+use lookbehind + backreference >>> insert new delimiter in replacement argument before ALL isntances of uppercase characters at word boundary (colelction acronyms in specimen)
+
+```{r}
+dat %>% 
+  mutate(specimen = str_replace_all(specimen, "((?<!^)\\b[A-Z])", ";\\1")) %>% 
+  unnest(specimen = strsplit(specimen, ";")) %>% 
+  mutate(specimen = str_squish(specimen)) -> dat
+```
+
+
+
+collection acronyms into new var based on ; separator
+
+```{r}
+dat %>% 
+  mutate(museumAbbr = str_extract(specimen, "^[A-Z]+")) %>% 
+  mutate(specimen = str_remove(specimen, "^[A-Z]+") %>% str_squish()) %>% 
+  mutate(specimen = str_remove(specimen, ",$")) %>% 
+  unnest(specimen = strsplit(specimen, ",")) %>% 
+  mutate(specimen = str_squish(specimen)) -> dat
+```
+
+finally deal with specimens with consecutive ID numbers not explicitly written
+- EXPAND the series >>> unnest
+
+```{r}
+expand_series <- function(ser_vector, separator) {
+  words <- str_split(ser_vector, paste(separator))
+  
+  if (length(words[[1]]) == 1) {
+    return(ser_vector)
+  } else {
+    start_str <- pluck(words, 1, 1)
+  }
+  end_str <- pluck(words, 1, 2)
+  
+  paste0(seq(as.integer(start_str), as.integer(end_str)), collapse = ", ")
+}
+
+expand_series <- Vectorize(expand_series)
+
+dat %>% 
+  mutate(specimen = expand_series(.$specimen, "-")) %>% 
+  unnest(specimen = strsplit(specimen, ", ")) %>% 
+  mutate(specimen = str_squish(specimen))
+
+
+```
+

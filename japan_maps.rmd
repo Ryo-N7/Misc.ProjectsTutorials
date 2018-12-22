@@ -557,3 +557,83 @@ ggplot(us_all) +
 transition_states(type, 2, 1)
 ```
 
+
+
+
+
+
+
+mapping districts from city spatial data:
+
+https://uribo.hatenablog.com/entry/2018/09/05/231642
+
+
+```{r}
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(purrr)
+library(sf)
+library(mapview)
+library(jpndistrict)
+```
+
+```{r encoding JP script}
+source("../japan_weather_plots/scripts/source_encoding_932.r")
+
+options(encoding = "utf-8")
+```
+
+```{r}
+sf_pref_27 <- jpn_pref(27, district = TRUE)
+
+sf_pref_27 %>% 
+  filter(str_detect(city, "^大阪市")) %>% 
+  mapview()
+
+```
+
+combine the 区polygons to show up as one unified CITY area.
+
+```{r}
+sf_pref_27 <- sf_pref_27 %>% 
+  mutate(city = str_remove(city, "[[:space:]].+区$"))
+```
+
+
+
+```{r}
+sf_pref33 <- 
+  jpn_pref(33, district = TRUE)
+
+sf_pref33 <- 
+  sf_pref33 %>% 
+  mutate(city = str_remove(city, "[[:space:]].+区$")) %>% 
+  group_by(city) %>% 
+  nest()
+
+city_union <- function(x) {
+  x %>% 
+    lwgeom::st_make_valid() %>% 
+    sf::st_union(by_feature = FALSE) %>% 
+    sf::st_transform(crs = 4326) %>% 
+    sf::st_cast("POLYGON") %>% 
+    purrr::map(
+      ~ .x[1]
+    ) %>% 
+    sf::st_multipolygon() %>% 
+    sf::st_sfc(crs = 4326)
+}
+
+sf_pref33 <- 
+  sf_pref33 %>% 
+  transmute(city,
+            geometry = pmap(., ~ city_union(..2)) %>% 
+              reduce(c)) %>% 
+  st_sf()
+
+
+sf_pref33 %>% mapview()
+
+```
+

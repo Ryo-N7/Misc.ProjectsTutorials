@@ -1,0 +1,114 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "December 22, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+pacman::p_load(tidyverse, scales, lubridate, ggrepel, sf,
+               glue, extrafont, readxl, jpndistrict, geofacet)
+loadfonts()
+
+```
+
+
+```{r}
+jpn_pop_raw <- read_xls("data/05k5-5.xls", skip = 9,
+                        col_types = c("skip", "text", "skip", "text",
+                                      "numeric", "numeric", "numeric", "numeric",
+                                      "numeric", "numeric", "numeric", "numeric",
+                                      "numeric", "numeric", "numeric", "numeric",
+                                      "numeric", "numeric", "numeric", "numeric"))
+
+# pop values in 1000s!!
+
+jpn_pop_clean <- jpn_pop_raw %>% 
+  slice(-49:-55) %>% 
+  set_names("jis_code", "pref_name", seq(2000, 2015, by = 1)) %>% 
+  mutate_if(is.numeric, funs(. * 1000))
+
+jpn_pop_clean %>% 
+  mutate(per_change_00_15 = (`2015`-`2000`)/`2000` * 100) %>% 
+  gather(key = "year", value = "population", 
+         -jis_code, -pref_name, -per_change_00_15) %>% 
+  filter(year %in% c(2000, 2015), pref_name != "Japan",
+         jis_code %in% c("01", "02", "03")) 
+
+## final df
+jpn_pop_df <- jpn_pop_clean %>% 
+  gather(key = "year", value = "population", 
+         -jis_code, -pref_name) %>% 
+  #filter(jis_code == "23") %>% 
+  group_by(jis_code) %>% 
+  arrange(year, .by_group = TRUE) %>% 
+  mutate(pct_change = (population/lag(population) - 1) * 100) 
+
+
+
+# percentage change
+
+jpn_pop_df %>% 
+  filter(jis_code %in% c("01", "02", "03")) %>% 
+  ggplot(aes(x = year, y = pct_change, group = 1)) +
+  geom_line() +
+  facet_wrap(~pref_name)
+
+# ALL lines on one graph
+jpn_pop_df %>% 
+  ggplot(aes(x = year, y = pct_change, group = pref_name)) +
+  geom_line()
+
+# absolute population
+jpn_pop_df %>% 
+  filter(jis_code %in% c("13", "23", "32")) %>% 
+  #group_by(year) %>% 
+  #mutate(pct_change = (population/lead(population) - 1) * 100) %>% 
+  ggplot(aes(x = year, y = population, group = pref_name)) +
+  geom_line()
+
+# all lines on one graph
+jpn_pop_df %>% 
+  filter(!is.na(jis_code)) %>% 
+  ggplot(aes(x = year, y = population, group = pref_name)) +
+  geom_line()
+```
+
+
+
+```{r}
+# JP prefectures
+sf_ja <- 1:47 %>% # Prefectural codes 1-47
+    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+    reduce(rbind) %>% 
+    st_simplify(dTolerance = 0.01) %>% 
+  mutate(pref_code = as.numeric(pref_code))
+
+# JP grid
+pref_names <- j_temp_map_stations_df %>% 
+  mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", "")) %>% 
+  distinct(pref_code, prefecture_en) %>% 
+  arrange(pref_code) %>% 
+  magrittr::use_series(prefecture_en)
+
+p_prefs_grid1 <- geofacet::jp_prefs_grid1 %>% 
+  arrange(code_pref_jis) %>% 
+  # fix Tochigi, Gunma & Ibaraki positioning:
+  mutate(col = as.numeric(case_when( 
+  code == "9" ~ "13",
+  code == "8" ~ "14",
+  code == "10" ~ "12",
+  TRUE ~ as.character(col))),
+  row = as.numeric(case_when( 
+    code == "9" ~ "5",
+    code == "8" ~ "6",
+    TRUE ~ as.character(row)))) %>% 
+  mutate(prefecture_en = pref_names)
+
+```
+
+

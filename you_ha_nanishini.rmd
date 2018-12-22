@@ -1,0 +1,50 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "September 8, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(scales)
+```
+
+
+from early 2016 to now (Sept. 2018)
+
+```{r}
+you_df <- data.frame(
+  europe = 38.5,
+  north_america = 41.8,
+  oceania = 6.6,
+  south_america_africa = 5.7,
+  special_episode = 5.7,
+  asia = 1.6
+)
+```
+
+from early 2016 to now (Sept. 2018)
+
+```{r}
+tourist_influx <- data.frame(
+  europe = 5.6,
+  north_america = 6.3,
+  oceania = 2.0,
+  other = 0.4,
+  asia = 85.7
+)
+```
+
+alternatives to presenting the differences that's NOT a pie chart?
+
+compare discrepancy? size difference <> color <> length of bars

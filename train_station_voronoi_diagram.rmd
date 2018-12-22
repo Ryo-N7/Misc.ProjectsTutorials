@@ -1,0 +1,18 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "November 16, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## https://chichacha.netlify.com/2018/11/10/voronoi-diagram-with-ggvoronoi-package-with-train-station-data/
+
+
+```{r}
+
+```
+
