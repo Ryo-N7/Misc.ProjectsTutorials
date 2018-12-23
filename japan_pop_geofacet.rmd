@@ -29,27 +29,35 @@ jpn_pop_raw <- read_xls("data/05k5-5.xls", skip = 9,
 
 jpn_pop_clean <- jpn_pop_raw %>% 
   slice(-49:-55) %>% 
-  set_names("jis_code", "pref_name", seq(2000, 2015, by = 1)) %>% 
+  set_names("jis_code", "name", seq(2000, 2015, by = 1)) %>% 
   mutate_if(is.numeric, funs(. * 1000))
 
 jpn_pop_clean %>% 
   mutate(per_change_00_15 = (`2015`-`2000`)/`2000` * 100) %>% 
   gather(key = "year", value = "population", 
-         -jis_code, -pref_name, -per_change_00_15) %>% 
-  filter(year %in% c(2000, 2015), pref_name != "Japan",
+         -jis_code, -name, -per_change_00_15) %>% 
+  filter(year %in% c(2000, 2015), name != "Japan",
          jis_code %in% c("01", "02", "03")) 
 
 ## final df
 jpn_pop_df <- jpn_pop_clean %>% 
   gather(key = "year", value = "population", 
-         -jis_code, -pref_name) %>% 
+         -jis_code, -name) %>% 
   #filter(jis_code == "23") %>% 
   group_by(jis_code) %>% 
   arrange(year, .by_group = TRUE) %>% 
-  mutate(pct_change = (population/lag(population) - 1) * 100) 
+  mutate(pct_change = (population/lag(population) - 1) * 100,
+         name = name %>% str_replace_all("-.*", ""),
+         name = case_when(
+           name == "Gumma" ~ "Gunma",
+           TRUE ~ name
+         )) %>% 
+  rename(code_pref_jis = jis_code)
+
+```
 
 
-
+```{r}
 # percentage change
 
 jpn_pop_df %>% 
@@ -82,18 +90,18 @@ jpn_pop_df %>%
 
 ```{r}
 # JP prefectures
-sf_ja <- 1:47 %>% # Prefectural codes 1-47
-    map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
-    reduce(rbind) %>% 
-    st_simplify(dTolerance = 0.01) %>% 
-  mutate(pref_code = as.numeric(pref_code))
+# sf_ja <- 1:47 %>% # Prefectural codes 1-47
+#     map(~jpndistrict::jpn_pref(pref_code = ., district = FALSE)) %>% 
+#     reduce(rbind) %>% 
+#     st_simplify(dTolerance = 0.01) %>% 
+#   mutate(pref_code = as.numeric(pref_code))
 
 # JP grid
-pref_names <- j_temp_map_stations_df %>% 
-  mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", "")) %>% 
-  distinct(pref_code, prefecture_en) %>% 
-  arrange(pref_code) %>% 
-  magrittr::use_series(prefecture_en)
+# pref_names <- j_temp_map_stations_df %>% 
+#   mutate(prefecture_en = str_replace(prefecture_en, "\\-.*", "")) %>% 
+#   distinct(pref_code, prefecture_en) %>% 
+#   arrange(pref_code) %>% 
+#   magrittr::use_series(prefecture_en)
 
 p_prefs_grid1 <- geofacet::jp_prefs_grid1 %>% 
   arrange(code_pref_jis) %>% 
@@ -106,9 +114,62 @@ p_prefs_grid1 <- geofacet::jp_prefs_grid1 %>%
   row = as.numeric(case_when( 
     code == "9" ~ "5",
     code == "8" ~ "6",
-    TRUE ~ as.character(row)))) %>% 
-  mutate(prefecture_en = pref_names)
+    TRUE ~ as.character(row))))
 
 ```
 
+# Percentage change
+
+```{r fig.width=20, fig.height = 18}
+jpn_pop_df %>% 
+  filter(!is.na(code_pref_jis)) %>%
+  ggplot(aes(x = year, y = pct_change, group = name)) +
+  geom_line(color = "red", size = 2) +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        plot.title = element_text(size = 30), 
+        plot.subtitle = element_text(size = 20),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 15),
+        strip.background = element_rect(color = "black", linetype = "solid")) +
+  labs(title = "Percentage Population Change in Japan (2000-2015)",
+       subtitle = glue("
+                       For most prefectures a slight decline except for Tokyo.
+                       Other outliers include Miyagi, Fukushima, and Chiba
+                       prefectures which suffered immensely from the 
+                       2011 Tohoku Earthquake.")) +
+  # annotate(geom = "text", x = 5, y = 5, 
+  #          label = "blahblabhablhbhlalrljwerltjerltjertl") +
+  facet_geo(~ name, grid = p_prefs_grid1)
+
+```
+
+# Absolute population change
+
+```{r fig.width=20, fig.height = 18}
+jpn_pop_df %>% 
+  filter(!is.na(code_pref_jis), year != "2000") %>%
+  ggplot(aes(x = year, y = population, group = name)) +
+  geom_line(color = "red", size = 2) +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        plot.title = element_text(size = 30), 
+        plot.subtitle = element_text(size = 20),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 15),
+        strip.background = element_rect(color = "black", linetype = "solid")) +
+  labs(title = "Percentage Population Change in Japan (2000-2015)",
+       subtitle = glue("
+                       For most prefectures a slight decline except for Tokyo.
+                       Other outliers include Miyagi, Fukushima, and Chiba
+                       prefectures which suffered immensely from the 
+                       2011 Tohoku Earthquake.")) +
+  # annotate(geom = "text", x = 5, y = 5, 
+  #          label = "blahblabhablhbhlalrljwerltjerltjertl") +
+  facet_geo(~ name, grid = p_prefs_grid1)
+```
 
