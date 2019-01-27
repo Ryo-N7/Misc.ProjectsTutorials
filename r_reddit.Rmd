@@ -1,0 +1,91 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "December 29, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+## install remotes pkg if not already
+if (!requireNamespace("remotes")) {
+  install.packages("remotes")
+}
+
+## install from github
+remotes::install_github("mkearney/rreddit")
+
+devtools::install_github("mkearney/rreddit")
+```
+
+
+
+
+```{r}
+# retrieved 1:23PM 12.29.18
+d <- get_r_reddit("anime", n = 10000)
+
+s <- get_r_reddit("soccer", n = 5000)
+```
+
+
+```{r}
+# 12.23 to 12.29
+s$created_utc %>% range()
+
+s %>% 
+  mutate(author_flair_text = author_flair_text %>% str_replace_all(":", ""),
+         author_flair_text = author_flair_text %>% str_replace_all("_", " ")) %>% 
+  add_count(author_flair_text) %>% 
+  distinct(author_flair_text, n) %>% 
+  arrange(desc(n)) %>% 
+  head(10) %>% 
+  ggplot(aes(x = reorder(author_flair_text, desc(n)), y = n)) +
+  geom_col() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6),
+        axis.title = element_blank())
+
+s %>% 
+  mutate(author_flair_text = author_flair_text %>% str_replace_all(":", ""),
+         author_flair_text = author_flair_text %>% str_replace_all("_", " ")) %>% 
+  add_count(author_flair_text) %>% 
+  filter(!is.na(author_flair_text)) %>% 
+  ggplot(aes(x = created_utc, y = n, group = author_flair_text)) +
+  geom_line()
+
+```
+
+
+
+```{r}
+d$is_original_content %>% table()
+```
+
+
+
+
+
+```{r}
+rtweet::ts_plot(dplyr::select(d, created_at = created_utc), "days", trim = 1) +
+  tfse::theme_mwk(base_size = 12) +
+  ggplot2::ylim(0, NA) +
+  ggplot2::labs(
+    x = NULL,
+    y = NULL,
+    title = "Activity on `r/dataisbeautiful` subreddit",
+    subtitle = "Monthly number of submissions on r/dataisbeautiful"
+  )
+
+
+
+ggplot(d, aes(x = created_utc, y = num_comments)) +
+  geom_point() +
+  scale_y_log10() +
+  geom_smooth()
+
+```
+
