@@ -9,13 +9,17 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r message=FALSE}
+# packages
+
+```{r message=FALSE, warning=FALSE}
 pacman::p_load(tidyverse, scales, lubridate, ggrepel, sf,
-               glue, extrafont, readxl, jpndistrict, geofacet)
-loadfonts()
+               glue, extrafont, readxl, jpndistrict, geofacet, cowplot,
+               gghighlight, magick)
+loadfonts(device = "win", quiet = TRUE)
 
 ```
 
+## load and calc
 
 ```{r}
 jpn_pop_raw <- read_xls("data/05k5-5.xls", skip = 9,
@@ -61,14 +65,14 @@ jpn_pop_df <- jpn_pop_clean %>%
 # percentage change
 
 jpn_pop_df %>% 
-  filter(jis_code %in% c("01", "02", "03")) %>% 
+  filter(code_pref_jis %in% c("01", "02", "03")) %>% 
   ggplot(aes(x = year, y = pct_change, group = 1)) +
   geom_line() +
-  facet_wrap(~pref_name)
+  facet_wrap(~name)
 
 # ALL lines on one graph
 jpn_pop_df %>% 
-  ggplot(aes(x = year, y = pct_change, group = pref_name)) +
+  ggplot(aes(x = year, y = pct_change, group = name)) +
   geom_line()
 
 # absolute population
@@ -86,7 +90,7 @@ jpn_pop_df %>%
   geom_line()
 ```
 
-
+## new grid
 
 ```{r}
 # JP prefectures
@@ -106,47 +110,221 @@ jpn_pop_df %>%
 p_prefs_grid1 <- geofacet::jp_prefs_grid1 %>% 
   arrange(code_pref_jis) %>% 
   # fix Tochigi, Gunma & Ibaraki positioning:
-  mutate(col = as.numeric(case_when( 
+  mutate(col = as.integer(case_when( 
   code == "9" ~ "13",
   code == "8" ~ "14",
   code == "10" ~ "12",
   TRUE ~ as.character(col))),
-  row = as.numeric(case_when( 
+  row = as.integer(case_when( 
     code == "9" ~ "5",
     code == "8" ~ "6",
     TRUE ~ as.character(row))))
 
+# col and row need to be INTEGER
+jp_prefs_grid1 %>% glimpse()
+p_prefs_grid1 %>% glimpse()
 ```
 
-# Percentage change
+
+```{r}
+j_pop <- jpn_pop_df %>% 
+  filter(!is.na(code_pref_jis)) %>%
+  mutate(affected = case_when(
+    name %in% c("Miyagi", "Fukushima", "Chiba", "Iwate", "Ibaraki") ~ "tohoku",
+    TRUE ~ "other"
+  ))
+  
+```
+
+
+
+## Percentage change
+
+- Chiba prefecture decline less due to deaths but due to soil liquefaction of reclaimed land areas leading to large amounts of housing damage
 
 ```{r fig.width=20, fig.height = 18}
-jpn_pop_df %>% 
-  filter(!is.na(code_pref_jis)) %>%
-  ggplot(aes(x = year, y = pct_change, group = name)) +
-  geom_line(color = "red", size = 2) +
+j_pop %>% 
+  ggplot(aes(x = as.numeric(year), y = pct_change, group = name)) +
+  geom_line(color = "black", size = 2) +
+  geom_line(data = j_pop %>% filter(affected == "tohoku"),
+            color = "red", size = 2) +
+  geom_hline(yintercept = 0, color = "grey20", size = 0.5) +
+  geom_vline(data = j_pop %>% filter(affected == "tohoku"),
+             aes(xintercept = 2011), color = "grey20", size = 0.5) +
+  labs(caption = glue("
+                      Data: e-Stat.go.jp (第５表   都  道  府  県  別  人  口 (各年10月1日現在)－ 総人口，日本人（平成12年～27年）)
+                      Created by: @R_by_Ryo")) +
   theme_minimal() +
   theme(text = element_text(family = "Roboto Condensed"),
-        plot.title = element_text(size = 30), 
-        plot.subtitle = element_text(size = 20),
+        plot.caption = element_text(size = 25, hjust = 0), 
         axis.title = element_blank(),
         axis.text = element_blank(),
         panel.grid = element_blank(),
         strip.text = element_text(size = 15),
         strip.background = element_rect(color = "black", linetype = "solid")) +
-  labs(title = "Percentage Population Change in Japan (2000-2015)",
-       subtitle = glue("
-                       For most prefectures a slight decline except for Tokyo.
-                       Other outliers include Miyagi, Fukushima, and Chiba
-                       prefectures which suffered immensely from the 
-                       2011 Tohoku Earthquake.")) +
-  # annotate(geom = "text", x = 5, y = 5, 
-  #          label = "blahblabhablhbhlalrljwerltjerltjertl") +
-  facet_geo(~ name, grid = p_prefs_grid1)
-
+  facet_geo(~ name, grid = p_prefs_grid1) -> jp_pop_geofacet
 ```
 
-# Absolute population change
+```{r fig.width=20, fig.height = 18}
+cols <- c("tohoku" = "red", "other" = "blue")
+
+j_pop %>% 
+  ungroup() %>% 
+  select(-name) -> j_no_group
+
+j_pop %>% 
+  ungroup() %>% 
+  group_by(name) %>% 
+  ggplot(aes(x = year, y = pct_change)) + #, group = name
+  geom_line(data = j_no_group, 
+            aes(color = affected), size = 0.75) +
+  geom_line() +
+  # geom_line(data = j_pop %>% filter(affected == "tohoku"),
+  #           color = "red", size = 2) +
+  gghighlight(#affected == "tohoku", 
+    #max(pct_change) > 0,
+              use_direct_label = FALSE) +
+  scale_color_manual(values = cols) +
+  labs(caption = glue("
+                      Data: e-Stat.go.jp (第５表   都  道  府  県  別  人  口 (各年10月1日現在)－ 総人口，日本人（平成12年～27年）)
+                      Created by: @R_by_Ryo")) +
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        plot.caption = element_text(size = 25, hjust = 0), 
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid = element_blank(),
+        strip.text = element_text(size = 15),
+        strip.background = element_rect(color = "black", linetype = "solid")) +
+  facet_geo(~ name, grid = p_prefs_grid1) -> jp_pop_geofacet2
+
+j_no_group %>% 
+  ggplot(aes(x = year, y = pct_change, group = code_pref_jis)) + 
+  geom_line(color = "grey") +
+  geom_line(data = j_pop, aes(color = affected)) +
+  facet_geo(~ code_pref_jis, grid = p_prefs_grid1)
+```
+
+
+```{r}
+jp_pop_geofacet +
+  annotation_custom(
+    grob = ggplotGrob(text_titles),
+    xmin = 0.1, xmax = 0.3,
+    ymin = 0.5, ymax = 0.7
+  )
+```
+
+
+
+
+```{r}
+ggplot() +
+  annotate(geom = "text", x = 3, y = 0.75,
+          size = 6, #family = "Roboto Condensed", 
+          color = 'black', hjust = 0,
+          label= "Percentage Population Change in Japan (2000-2015)") +
+  annotate(geom = "text", x = 3, y = 0.5,
+          size = 4, #family = "Roboto Condensed", 
+          color = 'black', hjust = 0,
+          label= glue("
+                       For most prefectures a slight year-on-year decline except for Tokyo.
+                       Other outliers include Miyagi, Fukushima, and Chiba
+                       prefectures which suffered immensely from the 
+                       2011 Tohoku Earthquake.")) + 
+  lims(x = c(0, 16), y = c(0, 1)) +
+  theme_void() -> text_titles
+  
+```
+
+## magick
+
+
+```{r}
+logo_header <- b %>% 
+  image_annotate(text = glue("
+                       Grey Horizontal Bar = 0% Change. Grey Vertical Bar = Year 2011.
+
+                       Most prefectures experienced a slight decline or no change from 
+                       the previous years except for the prefectures in vicinity of Tokyo
+                       (Saitama, Tokyo, Kanagawa, Chiba) and Okinawa.
+
+                       The population decline of prefectures along the north-east coast
+                       (Iwate, Miyagi, Fukushima, Ibaraki, Chiba) were exacerbated by
+                       the 2011 Tohoku Earthquake.
+                       "),
+                 color = "black", size = 18, font = "Roboto Condensed",
+                 location = "+63+20", gravity = "northwest")
+```
+
+
+
+```{r}
+library(magick)
+
+ggsave(jp_pop_geofacet, filename = "jp_pop_geo.png", 
+       width = 20, height = 18, dpi = 300)
+plot <- image_read("jp_pop_geo.png")
+
+a <- image_blank(width = 800, height = 80, color = "white")
+# combine with logo image and shift logo to the right
+
+# add in the title text
+logo_title <- a %>% 
+  image_annotate(text = "Percent Change in Population, Japan (2000-2015)",
+                 color = "black", size = 30, font = "Roboto Condensed",
+                 location = "+63+20", gravity = "northwest") 
+
+b <- image_blank(width = 800, height = 300, color = "white")
+logo_header <- b %>% 
+  image_annotate(text = glue("
+                       Grey Horizontal Bar = 0% Change. Grey Vertical Bar = Year 2011.
+
+                       In a time period where most prefectures suffered population decline
+                       and migration to Tokyo (and its neighboring prefectures) the
+                       problems for the prefectures along the north-east coast
+                       (Iwate, Miyagi, Fukushima, Ibaraki, Chiba) were exacerbated by
+                       the 2011 Tohoku Earthquake.
+                       "),
+                 color = "black", size = 18, font = "Roboto Condensed",
+                 location = "+63+20", gravity = "northwest")
+
+logos_image <- image_append(image_scale(c(logo_title, logo_header), "800"), stack = TRUE)
+logos_image
+
+logo_title
+logo_header
+
+asdf <- image_composite(image_scale(plot, "x1000"), logos_image)
+
+asdf
+image_write(asdf, path = glue("{here::here()}/jp_pop_plot.png"), format = "png")
+```
+
+
+
+
+
+```{r}
+ggplot() +
+  coord_equal(xlim = c(0, 28), ylim = c(0, 20), expand = FALSE) +
+  annotation_custom(ggplotGrob(jp_pop_geofacet))
+```
+
+
+
+
+```{r}
+ggdraw(jp_pop_geofacet) +
+  draw_plot(text_titles, width = 0.5, height = 0.5,
+            x = 0.1, y = 0.5)
+```
+
+
+
+
+
+## Absolute population change
 
 ```{r fig.width=20, fig.height = 18}
 jpn_pop_df %>% 
