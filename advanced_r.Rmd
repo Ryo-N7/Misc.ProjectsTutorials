@@ -1,0 +1,626 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "9/7/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Packages
+
+```{r}
+pacman::p_load(lobstr, rlang, dplyr)
+```
+
+
+# 2. Names & Values
+
+```{r}
+set.seed(1014)
+df <- data.frame(runif(3), runif(3))
+names(df) <- c(1, 2)
+
+str(df)
+
+df$`3` <- df$`1`+ df$`2`
+
+str(df)
+```
+
+```{r}
+x <- runif(1e6)
+y <- list(x, x, x)
+
+# object.size(y) WRONG
+lobstr::obj_size(y)
+```
+
+
+
+
+```{r}
+a <- c(1, 5, 3, 2)
+a
+
+b <- a
+b
+a
+
+b[[1]] <- 10
+
+b
+
+## a is copied when b is modified at line 3
+```
+
+
+
+
+
+
+
+```{r}
+lobstr::obj_addr(mean)
+lobstr::obj_addr(base::mean)
+lobstr::obj_addr(get("mean"))
+lobstr::obj_addr(evalq(mean))
+lobstr::obj_addr(match.fun("mean"))
+```
+
+
+```{r}
+read.csv(check.names = FALSE)
+```
+
+
+
+
+```{r}
+x <- c(1L, 2L, 3L)
+x
+tracemem(x)
+
+x[[3]] <- 4
+untracemem(x)
+```
+
+
+
+
+
+# 3. Vectors
+
+## 3.2: Atomic Vectors
+
+4 common types of vectors: double, character, logical, integer
+2 rare types of vectors: complex, raw
+
+Attributes: associate arbitrary additional metadata to object
+
+```{r}
+attr()
+attributes()
+```
+
+List vs. atomic vector: elements of LIST can be ANY type, elements of atomic vector must be the same
+
+Matrix vs. data frame:  element of matrix must be same, element of data frame can be ANY type
+
+List as matrix? Assign dimension to list
+Data frame have column == matrix? Assign matrix to column of df with `<- matrix()` or `I()`
+
+Difference between tibbles vs. data frame: tibbles have enhanced print method, NEVER coerces string to factors, provide stricter subsetting methods
+
+### 3.2.1: Scalars
+
+Scalar: individual value for the primary types of vectors
+- Logical: TRUE / FALSE, T / F
+- Doubles: decimal, scientific, hexadecimal forms. Special values (Inf, -Inf, NaN)
+- Integers: no fractional values, use of `L` at end
+- Strings: `"blah"`, special characters escaped with `\`
+
+
+
+### 3.2.2: Longer vectors with `c()`
+
+`c()`: combine
+
+```{r}
+lgl_var <- c(TRUE, FALSE)
+lgl_var
+
+int_var <- c(1L, 6L, 104L)
+int_var
+
+dbl_var <- c(1, 2.5, 6.45)
+dbl_var
+
+chr_var <- c("these are", "some strings")
+chr_var
+```
+If inputs == atomic vectors >> `c()` creates another atomic vector >> flattens
+
+```{r}
+c(c(1, 2), c(3, 4))
+```
+`type_of()`: determine type of vector 
+
+
+
+### 3.2.3: Missing Values
+
+Missing/unknown: `NA`, most computations with missing value return missing value!
+
+```{r}
+NA > 5
+10 * NA
+!NA
+```
+
+Exceptions: when identity holds for all possible inputs
+
+```{r}
+NA ^ 0
+NA | TRUE
+NA & FALSE
+```
+Common mistake: 
+
+```{r}
+x <- c(NA, 5, NA, 10)
+x == NA
+
+## use is.na() instead for testing presence of missingness!
+is.na(x)
+```
+NA types: `NA`, `NA_integer_`, `NA_real_`, `NA_character_`
+- `NA` usually coerced to correct type
+
+### 3.2.4: Testing and coercion
+
+`is.*()`: test for type of vector. 
+- AVOID: `is.vector()` + `is.atomic()` + `is.numeric()`
+- When attempt to combine different vector types >>> coercion
+- Coercion order: character >>> double >>> integer >>> logical
+Ex. combine character + integet == character
+
+```{r}
+str(c("A", 1))
+```
+- Most mathematical functions coerc to numeric (`+`, `log()`, `abs()`, etc.)
+- `TRUE` == `1` & `FALSE` == `0` 
+
+```{r}
+x <- c(FALSE, FALSE, TRUE)
+as.numeric(x)
+
+## total number of TRUE
+sum(x)
+
+## proportion that are TRUE
+mean(x)
+```
+
+`as.*()`: directly coerce vector type: `as.logical()`, `as.integer()`, `as.double()`, `as.character()`.
+
+Ex. failed coercion:
+
+```{r}
+as.integer(c("1", "1.5", "a"))
+```
+
+### exercise
+
+1. 
+scalars == represented as vectors of length == 1
+scalars of type raw:
+
+```{r}
+raw(1)
+as.raw(42)
+```
+
+scalars of type complex:
+
+```{r}
+complex(1)
+complex(length.out = 1, real = 1, imaginary = 1)
+```
+
+2. Vector coercion rules:
+
+```{r}
+c(1, FALSE)  ## double
+c("a", 1)    ## character
+c(TRUE, 1L)  ## integer
+```
+
+3. 
+
+```{r}
+1 == "1"    ## coerces to character
+## TRUE because `1` is coerced to "1"
+
+-1 < FALSE  ## coerces to double
+## TRUE because `FALSE` coerces to double >> `0`
+
+"one" < 2   ## coerces to character
+## FALSE because `2` coerces to character "2"
+## numerals precede letters but depends on locale
+```
+4. 
+
+DEFAULT missing NA == logical vector: due to hierarchy of type coercion, when combining `NA` with other atomic vector types then will be coerced in order integer, numeric, character. IF `NA` was character than all other values in set would be coerced to characters as well which would be problematic.
+
+5. 
+
+`is.atomic()`: test if atomic vector or NULL
+`is.numeric()`: test if object has type "integer"/"double" and NOT "factor", "Date", "POSIXt", "difftime"
+`is.vector()`: test if object is vector and NO attributes besides names
+
+## 3.3 Attributes
+
+Atomic vectors != `matrices`, `arrays`, `factors`, `date-times`
+- Built on top of atomic vectors by adding ATTRIBUTES
+
+### 3.3.1: Getting & Setting
+
+Attributes: name-value pairs >>> attach metadata on object
+- `attr()`: retrieve/modify individual attributes
+- `attributes()`: retrieve en masse
+- `structure()`: set en masse
+
+```{r}
+a <- 1:3
+attr(a, "asd49824-blahblah") <- "abcdef23blargh-attribute"
+attr(a, "asd49824-blahblah")
+```
+
+```{r}
+attr(a, "y") <- 4:6
+str(attributes(a))
+```
+
+```{r}
+a <- structure(
+  1:3,
+  x = "abcdef",
+  y = 4:6
+)
+
+str(attributes(a))
+```
+
+Most attributes lost by operations:
+
+```{r}
+attributes(a[1])
+attributes(sum(a))
+```
+
+Two attributes usually preserved:
+- `names`: character vector giving each element a name
+- `dim`: dimensions, integer vector used to turn vectors into matrices/arrays
+
+To preserve others, need to create S3 class.
+
+### 3.3.2: Names
+
+```{r}
+## Upon creation
+x <- c(a = 1, b = 2, c = 3)
+x
+
+## Assigning character vector to `names()`
+x <- 1:3
+names(x) <- c("a", "b", "c")
+x
+
+## Inline via `setNames()`
+x <- setNames(1:3, c("a", "b", "c"))
+x
+```
+
+```{r}
+unname(x)
+names(x) <- NULL
+```
+
+Missing names either "" or `NA_character_`. If all names missing == `NULL`
+
+### 3.3.3: Dimensions
+
+`dim`: Add to vector for it to behave like 2D matrix or multi-D array. 
+
+```{r}
+## 2 scalar arguments specifying row + column size
+a <- matrix(1:6, nrow = 2, ncol = 3)
+a
+
+## 1 vector argument to describe all dimensions
+b <- array(1:6, c(2, 3, 1))
+b
+
+## modify object in palce with `dim()`
+c <- 1:6
+dim(c) <- c(2, 3)
+c
+```
+
+- Vector with no `dim` attributes == NULL dimensions
+
+
+### exercise
+
+1. How are `setNames()` and `unname()` implemented?
+
+- `setNames()`: uses `names()` and assigns input to the object
+- `unname()`: removes existing names and sets to `NULL`
+
+2. `dim()` to 1d vector? When use `NROW()` and `NCOL()`?
+
+- `dim()`: returns NULL when applied to 1d vector
+
+```{r}
+x <- 1:10
+nrow(x)
+ncol(x)
+
+## use for when handle atomic vectors, lists, NULLs similar to 1 column matrices/data frames
+NROW(x)
+NCOL(x)
+```
+
+3. 
+
+```{r}
+x1 <- array(1:5, c(1, 1, 5)) ## 1 row 1 col 5 z
+x2 <- array(1:5, c(1, 5, 1)) ## 1 row 5 col 1 z
+x3 <- array(1:5, c(5, 1, 1)) ## 5 rows 1 col 1 z
+```
+
+4. `structure()`
+
+```{r}
+foo <- structure(1:5, comment = "my attribute")
+
+attributes(foo)
+
+attr(foo, which = "comment")
+```
+
+
+## 3.4: S3 Atomic vectors
+
+Class: vector attribute >>> S3 object system
+S3 object: Object with a class attribute, behaves differently from regular ector when passed to a generic function. Every S3 object is built on top of a base type, stores additional info about other attributes.
+
+### 3.4.1: Factors
+
+Factor: Vector containing only pre-defined values for storing categorical data. Built on top of integer vector with 2 attributes
+- Class "factor": behave differently from regular integer vectors
+- levels: Defines the set of allowed values
+
+```{r}
+x <- factor(c("a", "b", "b", "a"))
+x
+
+typeof(x)
+attributes(x)
+```
+
+Tabulating factors: Get counts of all categories, even if unobserved
+
+```{r}
+sex_char <- c("m", "m", "m")
+sex_factor <- factor(sex_char, levels = c("m", "f"))
+
+table(sex_char)
+table(sex_factor)
+```
+Ordered: Order of levels is meaningful (ex. low, medium, high)
+
+```{r}
+grade <- ordered(c("b", "b", "a", "c"), levels = c("c", "b", "a"))
+grade
+```
+
+Careful when using string methods on factors, as they are built on integer vectors NOT character.
+
+### 3.4.2: Dates
+
+Date: Built on top of double vectors. 
+- Class "Date", no other attributes
+
+```{r}
+today <- Sys.Date()
+
+today
+
+typeof(today)
+
+attributes(today)
+
+## value of double represents # of days since 1970-01-01
+date <- as.Date("1970-02-01")
+unclass(date)
+```
+
+### 3.4.3: Date-times
+
+
+POSIXct: calendar time >> atomic vector, appropriate for data frames
+POSIXlt: local time
+
+```{r}
+now_ct_DLT <- as.POSIXct("2018-07-22 09:00", tz = "America/New_York")
+now_ct <- as.POSIXct("2018-11-22 09:00", tz = "America/New_York")
+
+now_ct
+
+typeof(now_ct)
+
+attributes(now_ct)
+
+structure(now_ct_DLT, tzone = "Asia/Tokyo")
+structure(now_ct, tzone = "Asia/Tokyo")
+```
+
+### 3.4.4: Durations
+
+Durations: Amount of time between pairs of dates or date-times. >>> `difftimes`
+- Built on top of doubles, `units` attribute for how integer is interpreted
+
+```{r}
+one_week_1 <- as.difftime(1, units = "weeks")
+one_week_1
+
+typeof(one_week_1)
+attributes(one_week_1)
+
+one_week_2 <- as.difftime(7, units = "days")
+one_week_2
+
+typeof(one_week_2)
+attributes(one_week_2)
+```
+
+### exercise 
+
+1. `table()` object? Type? Attributes? Dimension changes as add more variables?
+
+Class: `table`
+array of integers with attributes `dim` and `dimnames`
+Dimensions correspond to # of unique values in each variable
+
+```{r}
+sex_char <- c("m", "m", "m")
+sex_factor <- factor(sex_char, levels = c("m", "f"))
+
+tabobj <- table(sex_char)
+
+typeof(tabobj)
+attributes(tabobj)
+
+
+```
+
+2. What happens to factor when modify its levels?
+
+```{r}
+f1 <- factor(letters)
+levels(f1) <- rev(levels(f1))
+
+levels(f1)
+as.integer(f1)
+```
+Underlying integer values remain same but levels change!
+
+
+
+
+
+### exercise 
+
+`table()` returns type integer, class "table", with "dim" and "dimnames" attributes, represented internally as array of integers
+
+```{r}
+typeof(table(cars))
+```
+
+
+2. What happens to factor when you modify levels?
+
+```{r}
+f1 <- factor(letters)
+levels(f1)
+as.integer(f1)
+
+levels(f1) <- rev(levels(f1))
+levels(f1)
+as.integer(f1)
+```
+
+underlying integer values stay the same but levels == changed!
+
+3. How do `f2` and `f3` differ from `f1`?
+
+```{r}
+f2 <- rev(factor(letters))
+
+f3 <- factor(letters, levels = rev(letters))
+
+f1
+f2
+f3
+```
+f1: BOTH order of factor elements AND order of levels reversed!
+f2: order of factor elements reversed
+f3: order of levels reversed
+
+
+## 3.5
+
+- Each element can be ANY type, not just ectors. 
+
+### 3.5.1: Creating
+
+```{r}
+l1 <- list(
+  1:3, 
+  "a", 
+  c(TRUE, FALSE, TRUE), 
+  c(2.3, 5.9)
+)
+
+typeof(l1)
+str(l1)
+```
+
+Elements of list are references >>> Creating a list does NOT involve copying components INTO the list!
+
+```{r}
+lobstr::obj_size(mtcars)
+l2 <- list(mtcars, mtcars, mtcars, mtcars)
+lobstr::obj_size(l2)
+```
+
+
+Lists: recursive vectors as list can contain other lists
+
+```{r}
+l3 <- list(list(list(1)))
+str(l3)
+```
+
+`c()` combines several lists into 1. If combo of atomic vectors and lists, coerce vectors to lists before combining.
+
+```{r}
+l4 <- list(list(1, 2), c(3, 4))
+l5 <- c(list(1, 2), c(3, 4))
+
+str(l4)
+str(l5)
+```
+
+
+### 3.5.2: Testing & coercion
+
+`is.list()`, `as.list()`, `unlist()` for list >> atomic vector
+
+```{r}
+list(1:3)
+as.list(1:3)
+```
+
+
+
+
+
+
+
+
+

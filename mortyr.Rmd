@@ -1,0 +1,64 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "7/22/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(tidyverse)
+library(mortyr)
+library(ggalt)
+library(tvthemes)
+```
+
+
+
+
+```{r}
+rickmorty_char_raw <- get_characters()
+```
+
+
+
+
+
+```{r}
+rickmorty_char_raw %>% glimpse()
+```
+
+```{r}
+rickmorty_char_raw %>% 
+  unnest(episode) %>% 
+  group_by(name) %>% 
+  summarize(n = n()) %>% 
+  arrange(desc(n)) %>% 
+  top_n(7, n) %>% 
+  ggplot(aes(x = n, y = reorder(name, n), 
+             fill = name)) +
+  geom_lollipop(point.size = 5, shape = 21,
+                horizontal = TRUE) +
+  scale_x_continuous(expand = c(0.01, 0.5)) +
+  scale_fill_rickAndMorty() +
+  theme_rickAndMorty()
+```
+
+
+
+```{r, fig.height=6, fig.width=8}
+rickmorty_char_raw %>% 
+  add_count(species) %>% 
+  ggplot(aes(x = n, y = reorder(species, n), 
+             fill = species)) +
+  geom_lollipop(point.size = 5, aes(fill = species), shape = 21,
+                horizontal = TRUE) +
+  scale_x_continuous(expand = c(0.01, 0.5)) +
+  #scale_y_discrete(expand = c(0, 0)) +
+  scale_fill_rickAndMorty() +
+  theme_rickAndMorty()
+```
+

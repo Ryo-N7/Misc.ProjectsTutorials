@@ -1,0 +1,265 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+pacman::p_load(ggplot2, dplyr, tvthemes, extrafont, 
+               glue, gapminder, emo, patchwork, cowplot)
+loadfonts()
+```
+
+
+```{r, fig.width=10, fig.height = 6, message=FALSE}
+b99plot <- mpg %>% 
+  ggplot(aes(displ)) +
+  geom_histogram(aes(fill = class), 
+                 col = "black", size = 0.1,
+                 binwidth = 0.1) +
+  scale_fill_brooklyn99() +
+  labs(title = "Do you know what it means to 'clap back', Raymond?",
+       subtitle = glue::glue("BE- {emo::ji('clap')} -CAUSE {emo::ji('clap')} I {emo::ji('clap')} DO {emo::ji('clap')} !"),
+       caption = "Pizza bagels? Pizza rolls? Pizza poppers? Pizzaritos? Pizza pockets?") +
+  theme_brooklyn99(title.font = "Titillium Web",
+                   text.font = "Calibri Light",
+                   title.size = 14,
+                   subtitle.size = 12,
+                   axis.title.size = 10,
+                  axis.text.size = 8) +
+  theme(legend.position = "none")
+
+bobspog_plot <- mpg %>% 
+  ggplot(aes(displ)) +
+  geom_histogram(aes(fill = class), col = "black", size = 0.1) +
+  scale_fill_spongeBob() +
+  labs(title = "F is for Fire that burns down the whole town!",
+       subtitle = "U is for Uranium... bombs! N is for No survivors when you're-",
+       caption = "Plankton, those things aren't what fun is about!") +
+  theme_spongeBob(title.font = "Some Time Later",
+                  text.font = "Some Time Later",
+                  title.size = 12,
+                  subtitle.size = 10,
+                  axis.title.size = 8,
+                  axis.text.size = 6,
+                  legend.title.size = 6) +
+  theme(legend.position = "none")
+
+data <- gapminder::gapminder %>% 
+  filter(country %in% c("France", "Germany", "Ireland", "Italy", "Japan", "Norway", "Belarus")) %>% 
+  mutate(year = as.Date(paste(year, "-01-01", sep = "", format='%Y-%b-%d')))
+
+simpsonsplot <- ggplot(data = data, aes(x = year, y = gdpPercap, fill = country)) +
+  geom_area(alpha = 0.8) +
+  scale_x_date(breaks = data$year, date_labels = "%Y") +
+  scale_y_continuous(expand = c(0, 0), labels = scales::dollar) +
+  scale_fill_simpsons() +
+  labs(title = "The Simpsons",
+       caption = glue::glue("
+                      A 'Bake 'em Away, Toys!' Production"),
+       x = "Wel-diddly-elcome neighborino!",
+       y = "Price of Duff Beer") +
+  theme_simpsons(title.font = "Akbar",
+                 text.font = "Akbar",
+                 title.size = 12,
+                  subtitle.size = 10,
+                  axis.title.size = 8,
+                  axis.text.size = 6,
+                 legend.title.size = 8) +
+  theme(legend.position = "none")
+
+rickandmortyplot <- ggplot(diamonds, aes(price, fill = cut)) +
+  geom_histogram(binwidth = 500) +
+  scale_fill_rickAndMorty() +
+  labs(title = "Dammit Morty, You Know Diamonds Aren't Forever Right?",
+       subtitle = "They're blood diamonds, Morty **burp**",
+       caption = "Wubbalubbadubdub!") +
+  theme_rickAndMorty(title.font = "Get Schwifty",
+                     text.font = "Get Schwifty",
+                     title.size = 10,
+                     subtitle.size =10,
+                     axis.title.size = 10,
+                     axis.text.size = 6) +
+  theme(legend.position = "none")
+
+## plot together:
+plot_grid(b99plot, bobspog_plot, simpsonsplot, rickandmortyplot, ncol = 2)
+```
+
+
+
+
+
+## v1.0.0
+
+```{r, fig.width=10, fig.height = 6, message=FALSE, warning=FALSE}
+data <- gapminder::gapminder %>% 
+  filter(country %in% c("France", "Germany", "Ireland", "Italy", 
+                        "Japan", "Norway", "Belarus", "United Kingdom",
+                        "Peru", "Spain")) %>% 
+  mutate(year = as.Date(paste(year, "-01-01", sep = "", format = '%Y-%b-%d')))
+
+kimpossible <- ggplot(data = data, aes(x = year, y = gdpPercap, fill = country)) +
+  geom_area(alpha = 0.9) +
+  scale_x_date(expand = c(0, 0),
+               breaks = data$year, 
+               date_labels = "%Y") +
+  scale_y_continuous(expand = c(0, 0), labels = scales::dollar) +
+  scale_fill_kimPossible() +
+  labs(title = "What's The Sitch, Wade?",
+       subtitle = glue::glue("Call Me {emo::ji('call')} Beep Me {emo::ji('pager')}  If You Wanna Reach Me {emo::ji('clap')} !"),
+       caption = "Stoppable... What Are You Doing In My House??",
+       x = "Year", y = "GDP per Capita") +
+  theme_spongeBob(title.font = "Roboto Condensed",
+                  text.font = "Roboto Condensed",
+                  title.size = 12,
+                  subtitle.size = 10,
+                  axis.title.size = 8,
+                  axis.text.size = 6,
+                  ticks = TRUE) +
+  theme(legend.position = "none")
+
+stannis <- ggplot(mpg, aes(displ)) +
+  geom_histogram(aes(fill = class), col = "black", size = 0.1) +
+  scale_fill_westeros(palette = "Stannis", n = 7, reverse = TRUE) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(title = glue("
+                    We do not choose our destinies. 
+                    Yet we must... we must do our duty, no? 
+                    Great or small, we must do our duty."),
+       subtitle = "I will have no burnings. Pray Harder.",
+       caption = glue("
+                      The Iron Throne is Mine by Right.
+                      - Stannis Baratheon"),
+       x = "Bent Knees", y = "Lightbringer") +
+  theme_minimal() +
+  theme(text = element_text(family = "Cinzel", size = 8),
+        plot.title = element_text(family = "Cinzel", size = 12),
+        plot.subtitle = element_text(size = 10),
+        plot.caption = element_text(size = 6),
+        axis.text = element_text(size = 6),
+        legend.position = "none") 
+
+bigherodot <- airquality %>% 
+  mutate(Month = as.factor(Month)) %>% 
+  ggplot(aes(x = Day, y = Temp, group = Month, fill = Month)) +
+  geom_point(size = 2.5, stroke = 1.25, shape = 21) +
+  labs(title = "Hiro, I Will Always Be With You.", 
+       subtitle = "I'm Satisfied With My Care, Baymax.",
+       caption = "Stop Whining, Woman Up!") + 
+  scale_fill_bigHero6() + 
+  theme_minimal() +
+  theme(text = element_text(family = "Roboto Condensed"),
+        plot.title = element_text(size = 12),
+        plot.subtitle = element_text(size = 10),
+        plot.caption = element_text(size = 8),
+        legend.position = "none")
+
+hildaday <- airquality %>% 
+  mutate(Month = as.factor(Month)) %>% 
+  ggplot(aes(x = Day, y = Temp, group = Month, color = Month)) +
+  geom_line(size = 1.5) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_color_hilda(palette = "Day") +
+  labs(title = "Well, that was pretty traumatic...",
+       subtitle = "but such is the life of an adventurer!",
+       caption = "I don't even have hands!!") +
+  theme_hildaDay(ticks = TRUE,
+                 legend.position = "none") +
+  theme(plot.title = element_text(size = 12),
+        plot.subtitle = element_text(size = 10),
+        plot.caption = element_text(size = 8))
+
+## plot together:
+plot_grid(kimpossible, stannis, bigherodot, hildaday, ncol = 2)
+```
+
+
+
+```{r}
+ggsave("tvthemes_v1plot.png", height = 6, width = 10)
+```
+
+
+
+
+
+
+```{r Hilda, fig.width=7, fig.height=5}
+airquality %>% 
+  mutate(Month = as.factor(Month)) %>% 
+  ggplot(aes(x = Day, y = Temp, group = Month, color = Month)) +
+  geom_line(size = 1.5) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_color_hilda(palette = "Day") +
+  labs(title = "Well, that was pretty traumatic...",
+       subtitle = "but such is the life of an adventurer!",
+       caption = "I don't even have hands!!") +
+    theme_hildaDay(ticks = TRUE,
+                    legend.position = "none") -> hildaday
+hildaday
+```
+
+```{r}
+ggsave("hildaday_v1plot.png", height = 5, width = 7)
+```
+
+
+
+
+```{r, fig.width=7, fig.height=5}
+hildadusk <- ggplot(mpg, aes(displ)) +
+  geom_histogram(aes(fill = rev(class)), col = "black", size = 0.1) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  scale_fill_hilda(palette = "Dusk", reverse = TRUE) +
+  labs(title = stringr::str_wrap("If you ask me all houses are basically the same. Roof, floors, walls...", width = 50),
+       subtitle = "people saying STOP WALKING IN LIKE THAT WOODMAN!",
+       caption = "I'm more of a writer than a fighter!") +
+  theme_hildaDusk(ticks = TRUE,
+                  legend.position = "none") +
+  theme(plot.title = element_text(size = 14))
+hildadusk
+```
+
+
+
+```{r}
+ggsave("hildadusk_v1plot.png", height = 5, width = 7)
+```
+
+
+```{r, fig.width=7, fig.height=5}
+airquality %>% 
+  mutate(Month = as.factor(Month)) %>% 
+  ggplot(aes(x = Day, y = Temp, group = Month, fill = Month)) +
+  geom_point(size = 3, stroke = 1.25, shape = 21) +
+  labs(title = "Could someone close that door,", 
+       subtitle = "it's a little drafty in here...",
+       caption = "I'm quite tall for an elf, actually.") + 
+  scale_fill_hilda(palette = "Night", reverse = TRUE) +
+  scale_x_continuous(expand = c(0.05, 0.02)) +
+  scale_y_continuous(expand = c(0.05, 0.02)) +
+  theme_hildaNight(ticks = TRUE) -> hildanight
+hildanight
+```
+
+
+```{r}
+ggsave("hildanight_v1plot.png", height = 5, width = 7)
+```
+
+
+
+
+
+
+
+
+

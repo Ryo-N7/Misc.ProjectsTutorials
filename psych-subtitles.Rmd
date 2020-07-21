@@ -1,0 +1,235 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "6/27/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+pacman::p_load(dplyr, tidyr, purrr, stringr, 
+               glue, readr,
+               rvest, polite, tvthemes,
+               ggplot2, scales, ggtext,
+               grid, gridExtra, subtools, downloader)
+```
+
+## Get Subtitle Links
+
+```{r}
+main_url <- "https://www.opensubtitles.org/en/ssearch/sublanguageid-eng/idmovie-19612/"
+
+session <- bow(main_url)
+
+all_tabs <- scrape(session) %>%
+  html_nodes(xpath = '//*[(@id <- "search_results")]') %>%
+  html_table(fill = TRUE)
+
+ep_links <- scrape(session) %>% 
+  html_nodes("a") %>% 
+  html_attr("href")
+
+ep_titles <- scrape(session) %>% 
+  html_nodes("a") %>% 
+  html_attr("title")
+
+links_all_raw <- tibble(link = ep_links, 
+                        title = ep_titles) 
+
+links_all_clean <- links_all_raw %>% 
+  filter(!is.na(title)) %>% 
+  distinct(link, .keep_all = TRUE) %>% 
+  mutate(link = link %>% 
+           str_replace_all(
+             "^/en/search/", 
+             "https://www.opensubtitles.org/download/s/")) %>% 
+  filter(str_detect(link, "imdb")) %>%
+  mutate(title = title %>% str_replace_all("\"Brooklyn Nine-Nine\" ", ""),
+         season = c(rep("S01", 15), rep("S02", 16), rep("S03", 16),
+                    rep("S04", 16), rep("S05", 16), rep("S06", 16),
+                    rep("S07", 15), rep("S08", 10)),
+         episode = c(1:15, 1:16, 1:16, 
+                     1:16, 1:16, 1:16,
+                     1:15, 1:10)) %>% 
+  mutate(episode = if_else(nchar(episode) == 1, 
+                           paste0("E0", episode), 
+                           paste0("E", episode)),
+         file_name = glue(
+           "{season}_{episode}_{str_replace_all(title, '[[:punct:]]', '')}"),
+         file_name = str_replace_all(file_name, " ", "_")) %>% 
+  select(episode, season, title, file_name, link)
+
+write_csv(links_all_clean,
+          path = here::here("data/psych_ep_subtitle_links.csv"))
+```
+
+
+
+```{r}
+links_all_clean <- read_csv(file = here::here("data/psych_ep_subtitle_links.csv"))
+```
+
+
+
+
+```{r}
+for(j in 1:nrow(links_all_clean)) {
+  if(!file.exists(paste0("../data/subtitles/",
+                         links_all_clean$file_name[j],
+                         ".zip"))) {
+    
+    Sys.sleep(sample(seq(0.5, 1.5, by = 0.5), 1))
+    
+    downloader::download(url = links_all_clean$link[j], 
+                         destfile = paste0("../data/subtitles/", 
+                         links_all_clean$file_name[j],
+                         ".zip"), mode = "wb")
+  }
+}
+```
+
+## Download Subtitles
+
+```{r}
+library(downloader)
+
+
+download(url = "https://www.opensubtitles.org/download/s/sublanguageid-eng/imdbid-2936284", destfile = "../data/subtitles/test.zip", mode = "wb")
+
+
+unzip("../data/subtitles/test.zip", 
+      exdir = "../data/subtitles", overwrite = F)
+```
+
+
+```{r}
+
+links_all_clean <- links_all_clean %>% slice(1:5)
+
+fs::dir_create(here::here("data/subtitles"))
+
+links_all_clean$link[[1]] -> link
+links_all_clean$file_name[[1]] -> file_name
+
+downloader::download(url = link,
+                     destfile = here::here(
+                       stringr::str_glue("data/subtitles/{file_name}.zip")), 
+                     mode = "wb")
+cat("Downloaded", file_name, "!\n")
+
+
+
+downloadSubtitles <- function(link = link, file_name = file_name) {
+  if(!file.exists(here::here(glue::glue("data/subtitles/{file_name}.zip")))) {
+    Sys.sleep(5)
+    downloader::download(url = link,
+                         destfile = here::here(
+                           glue::glue("data/subtitles/{file_name}.zip")), 
+                         mode = "wb")
+    cat("Downloaded", file_name, "!\n")
+  }
+}
+
+purrr::walk2(links_all_clean$link, links_all_clean$file_name, 
+             ~ downloadSubtitles(link = .x, file_name = .y))
+```
+
+## Extract Subtitles
+
+```{r}
+subtitles_zip <- list.files(here::here("data/subtitles/"), 
+                            recursive = TRUE) %>% 
+  paste0(here::here("data/subtitles//"), .)
+
+fs::dir_create(here::here("data/extracted_subtitles"))
+
+extractSubtitles <- function(zip_link = zip_link, file_name = file_name) {
+  if(!file.exists(zip_link)) {
+    unzip(zipfile = subtitles_zip,
+          exdir = here::here(glue::glue("data/extracted_subtitles/{file_name}")),
+          overwrite = FALSE)
+    cat("Unzip ", file_name, " Done!\n")
+  }
+}
+
+purrr::walk2(subtitles_zip, links_all_clean$file_name, 
+             ~ extractSubtitles(zip_link = .x, file_name = .y))
+
+
+here::here(glue::glue("data/extracted_subtitles/{file_name}"))
+```
+
+
+
+
+```{r}
+subtitles_srt <- tibble(sub_location = list.files("data/extracted_subtitles/", recursive = TRUE)) %>% 
+  mutate(sub_location = paste0("data/extracted_subtitles/", sub_location),
+         folder = as.character(str_extract_all(sub_location, ".*/")),
+         file_size = file.size(sub_location)) %>% 
+  group_by(folder) %>% 
+  #filter(file_size == max(file_size)) %>% 
+  filter(file_size == 91266) %>%
+  distinct(folder, .keep_all = TRUE) %>% 
+  mutate(episode_name = str_replace_all(sub_location, "data/extracted_subtitles/", ""),
+         episode_name1 = str_replace_all(episode_name, "/.*", ""),
+         season = str_replace_all(substr(episode_name1, 1, 7), "_.*", ""),
+         episode = str_replace_all(substr(episode_name1, 1, 7), ".*_", ""),
+         episode_name2 = str_replace_all(episode_name1, "S[0-9][0-9]_E[0-9][0-9]_", ""),
+         episode_name3 = str_replace_all(episode_name2, "_", " "))
+
+
+system(paste0("recode UTF-8 -f \"", subtitles_srt$sub_location[1], "\""))
+
+
+assign(paste(subtitles_srt$season[1],subtitles_srt$episode[1], sep = "_"),
+       as_tibble(read_subtitles(subtitles_srt$sub_location[1])) %>%
+         janitor::clean_names() %>%
+         rename(linenumber = id) %>% 
+         filter(nchar(text_content) > 0) %>%
+         mutate(text = iconv(tolower(text_content)) ,
+                season = subtitles_srt$season[1],
+                episode = subtitles_srt$episode[1],
+                episode_name = subtitles_srt$episode_name[1])
+)
+
+
+
+
+as_tibble(read_subtitles(subtitles_srt$sub_location[1])) %>%
+    janitor::clean_names() %>%
+    rename(linenumber = id) %>% 
+    filter(nchar(text_content) > 0) 
+
+
+for(j in 1:nrow(subtitles_srt)) {
+  system(paste0("recode UTF-8 -f \"", subtitles_srt$sub_location[j], "\""))
+}
+
+for(j in 1:nrow(subtitles_srt)) {
+  assign(paste(subtitles_srt$season[j],subtitles_srt$episode[j], sep = "_"),
+         as_tibble(read.subtitles(subtitles_srt$sub_location[j])$Text_content) %>%
+           clean_names() %>%
+           rename(linenumber = id) %>% 
+           filter(nchar(text) > 0) %>%
+           mutate(text = iconv(tolower(text)) ,
+                  season = subtitles_srt$season[j],
+                  episode = subtitles_srt$episode[j],
+                  episode_name = subtitles_srt$episode_name[j])
+  )
+}
+```
+
+
+```{r}
+read_subtitles(subtitles_srt$sub_location[1]) -> asdf
+
+asdf$subtitles
+```
+
+
+

@@ -1,0 +1,40 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load packages
+library(dray)  # remotes::install_github("matt-dray/dray")
+library(brickr)  # install.packages("brickr")
+library(dplyr)  # install.packages("dplyr")
+```
+
+
+
+
+```{r}
+lego_colors %>% select(brickrID, Color, hex) 
+```
+
+```{r}
+liverpool <- create_brickr_player(
+  hair_col = 2,
+  skin_col = 33,  # 10 16  33
+  boot_col = 1,
+  shirt_body_col = 7,
+  shirt_sleeve_col = 7,
+  shorts_col = 7, 
+  sock_col = 7, 
+  sock_trim_col = 7
+)
+
+
+livbricks <- liverpool %>% bricks_from_table()
+
+display_bricks(livbricks)
+```
+

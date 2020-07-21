@@ -1,0 +1,33 @@
+---
+title: "Untitled"
+author: "RN7"
+date: "8/24/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse, rtweet)
+```
+
+
+
+```{r}
+asdf <- get_favorites("R_by_Ryo", n = 3000)
+
+asdf %>% 
+  group_by(`@` = screen_name) %>% 
+  tally(sort = TRUE, name = "# of tweets liked") %>% 
+  head(25)
+```
+
+
+
+
+```{r}
+ryotimeline <- get_my_timeline(screen_name == "R_by_Ryo")
+```
+
