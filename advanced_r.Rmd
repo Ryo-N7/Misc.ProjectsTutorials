@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Packages
 
 ```{r}
-pacman::p_load(lobstr, rlang, dplyr)
+pacman::p_load(lobstr, rlang, dplyr, magrittr, purrr)
 ```
 
 
@@ -1057,6 +1057,2168 @@ x[NA_real_] # returns single NA
 ```
 
 `NA` is type: logical, logical vectors are recycled to the same length as vector being subsetted, so 5 `NA` returned.
+
+3. 
+
+```{r}
+x <- outer(1:5, 1:5, FUN = "*")
+x
+
+x[upper.tri(x)]
+```
+
+`upper.tr()` returns logical matrix with `TRUE` for all upper diagonal elements & `FALSE` else.
+
+Subsetting behavior identical to subsetting with logical matrices.
+
+4. `mtcars[1:20]` returns error? How differ from `mtcars[1:20, ]`
+
+```{r}
+mtcars[1:20]
+
+mtcars[1:20,]
+```
+
+Subsetting a data frame with a single vector: behaves similarly to subsetting a list of cols. When `mtcars[1:20]` >>> return df with first 20 cols. BUT `mtcars` only have 11 cols so error due to index out of bounds. `mtcars[1:20, ]` is subsetted with 2 vectors == 2d subsetting so first index will refer to the rows.
+
+
+5.
+
+
+
+6. `df[is.na(df)] <- 0`?
+
+```{r}
+df[is.na(df)] <- 0
+```
+
+
+
+
+
+## 4.3: Selecting a single element
+
+extract single items: `[[` 
+shorthand for `x[["y"]]`: `$`   >>> `x$y`
+
+
+
+### 4.3.1: `[[`
+
+Ex.
+
+If list `x` is a train carrying objects 
+->> `x[[5]]` is the object inside car 5.
+->> `x[4:6]` is a train of cars 4-6.
+
+When extracting a single element: 
+- Create a smaller train: `x[1]`
+- Extract contents of a particular carriage in train: `x[[1]]`
+
+For extracting multiple or zero elements >>> always need to make a smaller train, `[`.
+
+`[[` only returns a single item. Must use single positive integer or single string.
+- Vector: subset recursively: `x[[c(1, 2)]]` == `x[[1]][[2]]` >>> use `purrr::pluck()` instead
+- Use also for atomic vectors for extrating single values
+
+
+### 4.3.2: `$`
+
+
+- Often used to access variables in a df.
+- `$` does partial matching
+Ex. 
+
+```{r}
+x <- list(abc = 1)
+x$a
+x[["a"]]
+```
+
+To avoid >>> set global option: `warnPartialMatchDollar == TRUE`
+
+- tibbles never do partial matching!
+
+
+### 4.3.3: Missing and out-of-bounds indices
+
+Some inconsistencies when subsetting with `[[` with an invalid index.
+
+`purrr::pluck()` + `purrr::chuck()`
+
+When element is missing: `pluck()` ALWAYS returns `NULL`, `chuck()` throws `Error`
+
+`pluck()` behavior is good for indexing into deeply nested data structures where component that you want may not exist (ex. JSON data from web APIs).
+
+`pluck()` allows for mixed integer + character indices, and alt default value if item does not exist
+
+```{r}
+x <- list(
+  a = list(1, 2, 3),
+  b = list(3, 4, 5)
+)
+
+purrr::pluck(x, "a", 1)
+
+purrr::pluck(x, "c", 1)
+purrr::pluck(x, "c", 1, .default = NA)
+```
+
+### 4.3.4: `@` and `slot()`
+
+Subsetting for S4 objects.
+
+`@` equivalent to `$` (more restrictive and will return error if slot not exist) and `slot()` equivalent to `[[`
+
+
+### exercise
+
+1.
+
+```{r}
+mtcars
+
+mtcars$cyl[[3]]
+
+mtcars[3, 2]
+mtcars[[c(2, 3)]]
+
+mtcars[["cyl"]][[3]]
+
+with(mtcars, cyl[[3]])
+
+mtcars[3, ]$cyl
+
+mtcars[3, "cyl"]
+
+mtcars[3, ][ , "cyl"]
+mtcars[3, ][["cyl"]]
+```
+
+2.
+
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+
+mod$df.residual
+mod$df.res
+
+mod["df.residual"]
+mod[["df.residual"]]
+
+summary(mod)$r.squared
+```
+
+## 4.4: Subsetting and assignment
+
+Subassignment: All subsetting operators can be combined with assignment values of an input vector
+
+`x[i] <- value`
+
+```{r}
+x <- 1:5
+
+x
+
+x[c(1, 2)] <- c(101, 102)
+
+x
+```
+
+Make sure that `length(value)` == `length(x[i])`. If not, recycle and may cause problems.
+
+Lists: `x[[i]] <- NULL` to remove components, to add NULL: `x[i] <- list(NULL)`
+
+```{r}
+x <- list(a = 1, b = 2)
+x[["b"]] <- NULL
+str(x)
+
+y <- list(a = 1, b = 2)
+y["b"] <- list(NULL)
+str(y)
+```
+
+Subsetting with nothing can be useful in assignment as it preserves the structure of the original object.
+
+```{r}
+mtcars[] <- lapply(mtcars, as.integer)
+mtcars
+
+mtcars <- lapply(mtcars, as.integer)
+mtcars
+```
+
+## 4.5: Applications
+
+### 4.5.1: Lookup tables (character subsetting)
+
+Ex. convert abbreviations
+
+```{r}
+x <- c("m", "f", "u", "f", "f", "m", "m")
+lookup <- c(m = "Male", f = "Female", u = NA)
+lookup[x]
+unname(lookup[x])
+```
+
+### 4.5.2: Matching and merging by hand (integer subsetting)
+
+
+```{r}
+grades <- c(1, 2, 2, 3, 1)
+info <- data.frame(
+  grade = 3:1,
+  desc = c("Excellent", "Good", "Poor"),
+  fail = c(F, F, T)
+)
+
+grades
+
+info
+```
+
+Duplicate `info` so that one row for each value in `grades`
+
+```{r}
+id <- match(grades, info$grade)
+id
+
+info[id, ]
+```
+
+For multiple cols, collapse with `interaction()` or join functions like `merge()` or `dplyr::left_join()`.
+
+### 4.5.3: Random samples and bootstraps (integer subsetting)
+
+Use integer indices to randomly sample/bootstrap a vector/dataframe.
+
+`sample(n)` to generate random permutation of `1:n` then use results to subset values.
+
+```{r}
+df <- data.frame(x = c(1, 2, 3, 1, 2), y = 5:1, z = letters[1:5])
+
+## Randomly reorder
+df[sample(nrow(df)), ]
+
+## Select 3 random rows
+df[sample(nrow(df), 3), ]
+
+## Select 6 bootstrap replicates
+df[sample(nrow(df), 6, replace = TRUE), ]
+
+
+```
+
+### 4.5.4: Ordering (integer subsetting)
+
+`order()`: vector input >>> integer vector describing how to order subsetted vector
+
+```{r}
+x <- c("b", "c", "a")
+order(x)
+
+x[order(x)]
+```
+
+Tie-breakers: supply additional variables to `order()`. `decreasing = TRUE/FALSE` option. 
+
+Default: any missing values will be put last. Remove with `na.last = NA` or at front with `na.last = FALSE`.
+
+
+For 2D or more dimensions >>> order either rows or cols of objects:
+
+```{r}
+df
+df2 <- df[sample(nrow(df)), 3:1]
+df2
+
+df2[order(df2$x), ]
+
+df2[, order(names(df2))]
+```
+
+
+Sort vectors with `sort()` or `dplyr::arrange()` for data frames
+
+
+### 4.5.5: Expanding aggregated counts (integer subsetting)
+
+Uncollapse identical rows with count columns.
+- `rep()` >>> vectorization: `rep(x, y)` repeats `x[i] y[i]` times
+
+
+```{r}
+df <- data.frame(x = c(2, 4, 1), y = c(9, 11, 6), n = c(3, 5, 1))
+
+rep(1:nrow(df), df$n)
+
+df[rep(1:nrow(df), df$n), ]
+```
+
+
+### 4.5.6: Removing cols from data frames (character subsetting)
+
+Remove cols from df:
+1. Set cols to `NULL`
+
+```{r}
+df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
+
+df$z <- NULL
+df
+```
+
+2. Subset to return only columns needed
+
+```{r}
+df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
+
+df[, c("x", "y")]
+```
+
+
+If only know columns you DONT want, use set operations to work out which cols to keep:
+
+```{r}
+df[setdiff(names(df), "z")]
+
+df %>% select(-z)
+```
+
+
+### 4.5.7: Select rows based on condition (logical subsetting)
+
+```{r}
+mtcars[mtcars$gear == 5, ]
+```
+
+
+```{r}
+mtcars[mtcars$gear == 5 & mtcars$cyl == 4, ]
+```
+
+
+De Morgan's Laws:
+
+- `!(X & Y) == !X | !Y`
+- `!(X | Y) == !X & !Y`
+
+### 4.5.8: Boolean algebra vs. sets
+
+Set operations more effective:
+- Searching for the first or last `TRUE`
+- Have very few `TRUE` and many `FALSE`, set operation = faster + less storage
+- `which()` allows convert boolean to integer representation
+
+```{r}
+x <- sample(10) < 4
+
+which(x)
+
+unwhich <- function(x, n) {
+  out <- rep_len(FALSE, n)
+  out[x] <- TRUE
+  out
+}
+
+unwhich(which(x), 10)
+```
+
+- `X & Y` == `intersect(x, y)`
+- `X | Y` == `union(x, y)`
+- `X & !Y` == `setdiff(x, y)`
+- `xor(X, Y)` == `setdiff(union(x, y), intersect(x, y))`
+
+When logical vector contains `NA`, logical subsetting replaces with `NA` while `which()` drops values.
+
+`x[-which(y)]` NOT equivalent to `x[!y]`: IF y == all FALSE, `which(y)` == `integer(0)`. `-integer(0)` is still `integer(0)` so no values returned.
+
+
+### exercise
+
+1. Randomly permute df cols? Permute rows and cols at same time?
+
+```{r}
+df[sample(ncol(df))]
+
+df[sample(nrow(df)), sample(ncol(df))]
+```
+
+2. Select random sample of `m` rows from df.
+
+```{r}
+m <- 10
+mtcars[sample(nrow(mtcars), m), , drop = FALSE]
+mtcars[sample(nrow(mtcars), m), ]
+```
+
+Blocked sample:
+
+```{r}
+start <- sample(nrow(mtcars) - m + 1, 1)
+end <- start + m - 1
+
+start; end
+
+mtcars[start:end, , drop = FALSE]
+mtcars[start:end, ]
+```
+
+3. Cols in alphabetical order
+
+
+```{r}
+mtcars[order(names(mtcars))]
+
+mtcars %>% select(order(colnames(.)))
+mtcars %>% select(order(names(.)))
+mtcars %>% select(sort(tidyselect::peek_vars()))
+```
+
+
+# 5. Control flow
+
+- Choices: `if` statements, `switch()` calls >> run different code depending on input
+- Loops: `for`, `while` >> repeatedly run code with changing options
+
+1. Difference between `if` and `ifelse()`?
+
+`if` works with scalars
+`ifelse()` works with vectors
+
+2.
+
+```{r}
+x <- TRUE
+y <- if (x) 3
+y
+
+x <- FALSE
+y <- if (x) 3
+y
+
+x <- NA
+y <- if (x) 3
+y
+```
+
+3. 
+
+```{r}
+switch("x", x = , y = 2, z = 3)
+```
+
+## 5.2 Choices
+
+With single `if` statement, returns `NULL` if condition is `FALSE`. 
+- `c()` and `paste()` drop `NULL` inputs: much more compact expressions
+
+### 5.2.1: Invalid inputs
+
+`condition` should evaluate to a SINGLE `TRUE` or `FALSE`
+
+```{r}
+if ("x") 1
+
+if (logical()) 1
+
+if (NA) 1
+```
+
+Logical vector of length > 1: generates warning
+
+```{r}
+if (c(TRUE, FALSE)) 1 
+```
+
+Can be turned into error via environment variable.
+
+```{r}
+Sys.setenv("_R_CHECK_LENGTH_1_CONDITION_" = "true")
+if (c(TRUE, FALSE)) 1 
+```
+
+### 5.2.2: Vectorized if
+
+`ifelse()`: vector of logical values >>> `test`, `yes`, `no`
+
+```{r}
+x <- 1:10
+ifelse(x %% 5 == 0, "XXX", as.character(x))
+
+ifelse(x %% 2 == 0, "EVEN", "ODD")
+```
+
+Use for SAME type >>> hard to predict output type if different vectors 
+
+`dplyr::case_when()` 
+
+
+### 5.2.3: `switch()` statement
+
+```{r}
+x_option <- function(x) {
+  switch(x,
+         a = "option 1",
+         b = "option 2",
+         c = "option 3",
+         stop("Invalid 'x' value"))
+}
+```
+
+Last component of `switch()` should always throw an error or otherwise unmatched inputs will invisibily return `NULL`
+
+```{r}
+(switch("c", a = 1, b = 2))
+```
+
+If multiple inputs have same output, leave right-hand side empty and input will fall through to next value.
+
+Use `switch()` only for character inputs.
+
+### exercise
+
+1. 
+
+```{r}
+ifelse(TRUE, 1, "no") %>% class()
+ifelse(FALSE, 1, "no") %>% class()
+
+ifelse(NA, 1, "no") %>% class()
+```
+
+```{r}
+x <- 1:10
+if (length(x)) "not empty" else "empty"
+
+x <- numeric()
+
+if (length(x)) "not empty" else "empty"
+```
+
+`length(x)` evaluates to 0 >>> FALSE
+
+
+## 5.3 Loops
+
+- Iterate over items in a vector.
+
+`for` (item `in` vector) perform_action
+
+For each item in vector >>> perform_action is called once, updating value of `item` every time.
+
+```{r}
+for (i in 1:3) {
+  print(i)
+}
+```
+
+`for` assigns `item` to the CURRENT ENVIRONMENT, overwrites any existing variables with the same name.
+
+Terminate loop early:
+- `next` exits current iteration
+- `break` exits entire loop
+
+
+```{r}
+for (i in 1:10) {
+  if (i < 3)
+    next
+  print(i)
+  
+  if (i >= 5) 
+    break
+}
+```
+
+### 5.3.1: Common pitfalls
+
+- Pre-allocate output container for generating data.
+- Iterating over `1:length(x)` not work if `x` of length == 0. Use `seq_along()` instead.
+
+```{r}
+means <- c(1, 50, 20)
+
+out <- vector("list", length(means))
+
+for (i in seq_along(means)) {
+  out[[i]] <- rnorm(10, means[[i]])
+}
+
+out
+```
+
+Iteration over S3 vectors >>> loops strip attributes so wrap around with `[[`
+
+```{r}
+xs <- as.Date(c("2020-01-01", "2010-01-01"))
+
+for (i in seq_along(xs)) {
+  print(xs[[i]])
+}
+```
+
+### 5.3.2: Related tools
+
+- `while` (condition) action: performs action while condition == `TRUE`
+- `repeat` (action): repeats action forever until `break`
+
+- use `map()` and `apply()`
+
+
+### exercise
+
+```{r}
+x <- numeric() 
+
+out <- vector("list", length(x))
+
+for (i in 1:length(x)) {
+  out[i] <- x[i] ^ 2
+}
+
+out
+
+for (i in seq_along(x)) {
+  out[i] <- x[i] ^ 2
+}
+
+out
+```
+
+
+2. 
+
+```{r}
+x
+xs <- c(1, 2, 3)
+
+for (x in xs) {
+  xs <- c(xs, x * 2)
+}
+
+xs
+```
+
+
+3. 
+
+```{r}
+for (i in 1:3) {
+  i <- i * 2
+  print(i)
+}
+```
+
+In a for-loop the index is updated in the beginning of each iteration. Therefore, reassigning the index symbol during one iteration doesn’t affect the following iterations.
+
+
+
+
+
+
+# 6. Functions
+
+
+## 6.2 Function fundamentals
+
+- Functions: arguments, body, environment
+- Primitive "base" functions >>> C
+- Functions are objects
+
+
+### 6.2.1: Function components
+
+- `formals()`: list of arguments that control how you call the function
+- `body()`: code inside the function
+- `environment()`: data structure that determines how function finds the values associated with the names
+
+Formals + body specified explicitly, environment implictily (based on where function was defined). Function environment always exists, ONLY printed when function is NOT defined in the global environment.
+
+```{r}
+f02 <- function(x, y) {
+  # blah
+  x + y 
+}
+
+formals(f02)
+body(f02)
+environment(f02)
+```
+
+Functions can possess `attributes()`. 
+- `srcref`: source reference, source code used to create the function. Contains code comments and other formatting
+
+```{r}
+attr(f02, "srcref")
+```
+
+### 6.2.2: Primitive functions
+
+type `builtin` or `special`
+
+```{r}
+typeof(sum)
+typeof(`[`)
+```
+
+Exist in C so formals, body, environment all `NULL`.
+
+Only found in `base` package. Performance advantages but harder to write
+
+### 6.2.3: First-class functions
+
+R functions are objects >>> "first-class functions".
+
+Create a function object with `function()` and assign with `<-`
+
+```{r}
+f01 <- function(x) {
+  sin(1 / x ^ 2)
+}
+```
+
+Anonymous function: function without name
+
+```{r}
+lapply(mtcars, function(x) length(unique(x)))
+Filter(function(x) !is.numeric(x), mtcars)
+```
+
+Functions can be placed inside lists.
+
+```{r}
+funs <- list(
+  half = function(x) x / 2,
+  double = function(x) x * 2
+)
+
+funs$double(10)
+```
+
+### 6.2.4: Invoking a function
+
+Arguments in data structure >>> use `do.call()` 
+
+```{r}
+args <- list(1:10, na.rm = TRUE)
+
+do.call(mean, args)
+```
+
+### exercise
+
+1.
+
+NO one-to-one mapping between functions and names. Name points to a single object but object can have many names.
+
+
+2. 
+
+```{r}
+(function(x) 3)()
+```
+
+Extra `()` separate function call from anonymous function body
+
+3. Descriptive names for non-anonymous functions. Anonymous functions for conciseness.
+
+4. 
+
+Use `is.function()` to test if object is function. Use `is.primitive()` for specifically primitive functions.
+
+
+5. 
+
+List all functions in `base`
+
+```{r}
+objs <- mget(ls("package:base", all = TRUE), inherits = TRUE)
+funs <- Filter(is.function, objs)
+```
+
+
+```{r}
+n_args <- funs %>% 
+  map(formals) %>% map_int(length) 
+  
+n_args %>%   
+  sort(decreasing = TRUE) %>% head()
+```
+
+`scan()` has most arguments.
+```{r}
+n_args2 <- funs %>% discard(is.primitive) %>% map(formals) %>% map_int(length)
+
+sum(n_args2 == 0)
+```
+
+Most no arg functions are primitive functions.
+
+6. body, formals, environment.
+
+7. Primitive and functions created in global environment do NOT print their environment.
+
+## 6.3 Function Composition
+
+```{r}
+square <- function(x) x^2
+deviation <- function(x) x - mean(x)
+
+## 1. nest function calls:
+x <- runif(100)
+
+sqrt(mean(square(deviation(x))))
+
+## 2. save intermediate results as variables
+out <- deviation(x)
+out <- square(out)
+out <- mean(out)
+out <- sqrt(out)
+out
+
+## 3. magrittr pipe 
+x %>% 
+  deviation() %>% 
+  square() %>% 
+  mean() %>% 
+  sqrt()
+```
+
+- Nesting: concise, suited for short sequences. Longer == harder to read >>> inside out + right to left. 
+- Intermediate objects: Need to name intermediary objects every time.
+- Piping: Left-to-right. Only for linear sequences of transformation of a single object. 
+
+
+## 6.4 Lexical scoping
+
+Scoping: finding value associated with name.
+
+```{r}
+x <- 10
+g01 <- function() {
+  x <- 20
+  x
+}
+
+g01()
+```
+
+Lexical scoping: it looks up the values of names based on how a function is DEFINED, not CALLED. Scoping rules use a parse-time > run-time structure.
+
+4 primary rules:
+- Name masking
+- Functions vs. variables
+- Fresh start
+- Dynamic lookup
+
+### 6.4.1: Name masking
+
+Names defined inside a function mask names defined outside a function.
+
+```{r}
+x <- 10
+y <- 20
+
+g02 <- function() {
+  x <- 1
+  y <- 2
+  c(x, y)
+}
+
+g02()
+```
+
+IF name not defined inside function, R looks one level up.
+
+```{r}
+x <- 2 
+
+g03 <- function() {
+  y <- 1
+  c(x, y)
+}
+
+g03()
+
+y
+```
+
+Functions defined another function. R first looks in the current function, then where function was defined, ..., global environment, other loaded packages.
+
+```{r}
+x <- 1
+y <- 2084
+
+g04 <- function() {
+  y <- 2
+  i <- function() {
+    z <- 3
+    c(x, y, z)
+  }
+  i()
+}
+
+g04()
+```
+
+### 6.4.2: Functions vs. variables
+
+Scoping rules also apply to functions themselves as functions are objects.
+
+```{r}
+g07 <- function(x) x + 1
+g08 <- function() {
+  g07 <- function(x) x + 100
+  g07(10)
+}
+
+g08()
+```
+
+IF function and non-function share same name (in different environments):
+- R ignores non-function objects when looking for value of function call.
+
+```{r}
+g09 <- function(x) x + 100
+g10 <- function(x) {
+  g09 <- 10
+  g09(g09)
+}
+g10()
+```
+
+### 6.4.3: Fresh start
+
+Values in between invocations of a function:
+
+Run once, then again:
+
+```{r}
+g11 <- function() {
+  if (!exists("a")) {
+    a <- 1
+  } else {
+    a <- a + 1
+  }
+  a
+}
+
+g11()
+g11()
+```
+
+Returns SAME value. Every time function is called, a NEW environment is created to host its execution! Each invocation is completely independent.
+
+### 6.4.4: Dynamic lookup
+
+R looks for values when function is run NOT when created. Output of function can differ depending on objects outside function environment.
+
+```{r}
+g12 <- function() x + 1 
+x <- 15
+g12()
+
+x <- 20
+g12()
+```
+
+Detect global environment variables, `codetools::findGlobals()`: Lists all external dependencies (unbound symbols) within function.
+
+```{r}
+codetools::findGlobals(g12)
+```
+
+Manually change function environment to `emptyenv()`. Empty environment.
+
+```{r}
+environment(g12) <- emptyenv()
+g12()
+```
+
+R relies on lexical scoping to find ALL.
+
+### exercise
+
+1. 
+
+```{r}
+c <- 10
+c(c = c)
+```
+
+c: function call `c()`
+c: list name `c`
+c: variable R object value `c`
+
+
+2. 
+
+Lexical scoping:
+- Name masking, functions vs. variables, fresh start, dynamic lookup
+
+
+3. 
+
+```{r}
+f <- function(x) {
+  f <- function(x) {
+    f <- function() {
+      x ^ 2
+    }
+    f() + 1
+  }
+  f(x) * 2
+}
+
+f(10)
+```
+
+Order of calculation from inside-to-outside!
+
+
+## 6.5 Lazy evaluation
+
+Functions arguments are lazily evaluated: only evaluated if accessed.
+
+```{r}
+h01 <- function(x) {
+  10
+}
+
+## no erroras 'x' is never used.
+h01(stop("This is an error"))
+```
+
+### 6.5.1: Promises
+
+Lazy eval powered by `promise`/`thunk` data structure. 
+
+3 components:
+- Expression: ex. `x + y`, delayed computation
+- Environment: Where expression is evaluated.
+-- Variable is bound outside of function
+
+```{r}
+y <- 10
+
+h02 <- function(x) {
+  y <- 100
+  x + 1 
+}
+
+h02(y)
+
+h02(y <- 1000)
+y
+```
+
+- Value: Computed & cached the first time a promise is accessed when expression evaluated in specified environment. Promise is evaluated at most once.
+
+```{r}
+double <- function(x) {
+  message("Calculating...")
+  x * 2
+}
+
+h03 <- function(x) {
+  c(x, x)
+}
+
+h03(double(x))
+```
+
+Can not manipulate promises with R code.
+
+
+### 6.5.2: Default arguments
+
+Default values can be defined in terms of other arguments or variables defined later in function >>> NOT RECOMMENDED. Code harder to understand. 
+
+
+```{r}
+h04 <- function(x = 1, y = x * 2, z = a + b) {
+  a <- 10
+  b <- 100
+  c(x, y, z)
+}
+
+h04()
+```
+
+Evaluation environment different between default vs. user-supplied arguments. Defaults are evaluated inside function.
+
+
+### 6.5.3: Missing arguments
+
+`missing()` to find if user or default:
+
+```{r}
+h06 <- function(x = 10) {
+  list(missing(x), x)
+}
+
+str(h06())
+str(h06(10))
+```
+
+
+### exercise
+
+1. `&&` 
+
+```{r}
+x_ok <- function(x) {
+  !is.null(x) && length(x) == 1 && x > 0
+}
+
+x_ok(NULL)
+x_ok(1)
+x_ok(1:3)
+
+x_ok <- function(x) {
+  !is.null(x) & length(x) == 1 & x > 0
+}
+
+x_ok(NULL)
+x_ok(1)
+x_ok(1:3)
+```
+We expect x_ok() to validate its input via certain criteria: it must not be NULL, but have length 1 and a value greater than 0. Meaningful outcomes for this assertion will be TRUE, FALSE or NA. The desired behaviour is reached by combining the assertions through && instead of &.
+
+&& does not perform elementwise comparisons, instead it uses the first element of each value only. It also uses lazy evaluation, in the sense that evaluation “proceeds only until the result is determined” (from ?Logic). This means that the RHS of && won’t be evaluated if the LHS already determines the outcome of the comparision (e.g. evaluate to FALSE). This behaviour is also known as ‘shortcircuiting’. For some situations (x = 1) both operators will lead to the same result. But this is not always the case. For x = NULL, the &&-operator will stop after the !is.null-statement and return the result. The following conditions won’t even be evaluated! (If the other conditions are also evaluated (by the use of &), the outcome would change. NULL > 0 returns logical(0), which is not helpful in this case.)
+
+We can also see the difference in behaviour, when we set x = 1:3. The &&-operator returns the result from length(x) == 1, which is FALSE. Using & as the logical operator leads to the (vectorised) x > 0 condition being be evaluated and also returned.
+
+
+2. What does `f2()` return? Why? 
+
+```{r}
+f2 <- function(x = z) {
+  z <- 100
+  x
+}
+
+f2()
+```
+
+Return `100`. Default argument value can be lazy evaluated within function environment when `x` gets accessed where `x` == `z`.
+
+
+
+```{r}
+y <- 10
+f1 <- function(x = {y <- 1; 2}, y = 0) {
+  c(x, y)
+}
+f1()
+y
+```
+
+The function returns c(2, 1) which is due to name masking. When x is accessed within c(), the promise x = {y <- 1; 2} is evaluated inside f1()’s environment. y gets bound to the value 1 and the return value of {() (2) gets assigned to x. When y gets accessed next within c(), it has already the value 1 and R doesn’t need to look it up any further. Therefore, the promise y = 0 won’t be evaluated. Also, as y is assigned within f1()’s environment, the value of the global variable y is left untouched.
+
+
+4. 
+
+```{r}
+hist(mtcars$mpg, xlim = c(10, 55))
+```
+
+The xlim argument of hist() defines the range of the histogram’s x-axis. In order to provide a valid axis xlim must contain a numeric vector of exactly two unique values. Consequently for the default xlim = range(breaks)), breaks must evaluate to a vector with at least two unique values.
+
+During execution hist() overwrites the breaks argument. The breaks argument is quite flexible and allows the users to provide the breakpoints directly or compute them in several ways. Therefore the specific behaviour depends highly on the input. But hist ensures that breaks evaluates to a numeric vector containing at least two unique elements before xlim is computed.
+
+
+
+
+5. 
+
+```{r}
+show_time <- function(x = stop("Error!")) {
+  stop <- function(...) Sys.time()
+  print(x)
+}
+show_time()
+show_time(x = stop("Error!"))
+```
+
+Before show_time() accesses x (default stop("Error")), the stop() function is masked by function(...) Sys.time(). Because default arguments are evaluated in the function environment, print(x) will be evaluated as print(Sys.time()).
+
+This function is confusing, because its behaviour changes when x’s value is supplied directly. Now the value from the calling environment will be used and the overwriting of stop won’t affect the outcome any more.
+
+
+
+6.
+
+```{r}
+library()
+```
+
+
+
+## 6.6 ...
+
+
+Functions can have special argument `...`. Can take ANY number of additional arguments. "varargs", "variadic". Use `...` to pass additional arguments to another function. 
+
+
+```{r}
+i01 <- function(y, z) {
+  list(y = y, z = z)
+}
+
+i02 <- function(x, ...) {
+  i01(...)
+}
+
+str(i02(x = 1, y = 2, z = 3))
+```
+
+Can use `..N` to refer to elements of `...` by position. 
+
+`list(...)`: evaluates arguments and stores in list
+
+```{r}
+i04 <- function(...) {
+  list(...)
+}
+
+str(i04(a = 1, b = 2))
+```
+
+
+Primary uses of `...`:
+
+- If function takes a functio nas argument, use as means of passing additional arguments to that function.
+
+Ex. `...` in `lapply()` to pass `na.rm` arg to `mean()`:
+
+```{r}
+x <- list(c(1, 3, NA), c(4, NA, 6))
+str(lapply(x, mean, na.rm = TRUE))
+```
+
+- If function == S3 generic, use to allow methods to take arbitrary extra arguments. 
+-- `print()`: different options for printing depending on type of object, no ay to pre-specify EVERY possible argument, so `...` allows individual methods to have different arguments.
+
+```{r}
+print(factor(letters), max.levels = 4)
+print(y ~ x, showEnv = TRUE)
+```
+
+Downsides:
+
+- Necessity to carefully explain where arguments go.
+- Misspelled arguments will not raise error!
+
+### exercise
+
+1. 
+
+```{r}
+sum(1, 2, 3)
+mean(1, 2, 3)
+
+sum(1, 2, 3, na.omit = TRUE) ## TRUE is evaluated as numeric `1` as 'na.omit' is not a real argument that can be passed on
+mean(1, 2, 3, na.omit = TRUE)
+```
+
+However, in contrast to sum() the elements of ... are not “part” of the mean. The other supplied arguments are matched by their order, i.e. x = 1, trim = 2 and na.rm = 3. As x is of length 1 and not NA, the settings of trim and na.rm do not affect the calculation of the mean. Both calls (mean(1, 2, 3) and mean(1, 2, 3, na.omit = TRUE)) return 1.
+
+
+2. 
+
+```{r}
+plot(1:10, col = "red", pch = 20, xlab = "x", col.lab = "blue")
+```
+
+
+## 6.7 Exiting a function
+
+Exit: return value (success) or error (failure). 
+
+### 6.7.1: Implicit vs. explicit returns
+
+Functions return values in 2 ways:
+
+1. Implicitly: where last evaluated expression is return value
+
+2. Explicitly: calling `return()`
+
+
+### 6.7.2: Invisible values
+
+Most functiosn return visibly: calling function in interactive context prints the result. Prevent automatic printing by applying `invisible()` to last value.
+
+```{r}
+j03 <- function() 1
+j03()
+
+j04 <- function() invisible(1)
+j04()
+```
+
+To verify invisibly value actually exists, explicitly `print()`, wrap in `()`, or `withVisible()`
+
+```{r}
+print(j04())
+(j04())
+str(withVisible(j04()))
+```
+
+Most common function that returns invisibly `<-` 
+
+```{r}
+a <- 2
+(a <- 2)
+
+## chain assignments
+a <- b <- c <- d <- 2
+```
+
+In general: any function called primarily for a SIDE EFFECT (`<-`, `print()`, `plot()`, etc.) should return an invisible value (typically value of first argument).
+
+
+### 6.7.3: Errors
+
+If function can not complete assigned task >>> error with `stop()`.
+
+### 6.7.4: Exit handlers
+
+Temporary changes to global state >> clean up can be painful esp. if error.
+
+Use `on.exit()` to restore global state no matter how function exits.
+
+
+```{r}
+j06 <- function(x) {
+  cat("Hello\n")
+  on.exit(cat("Goodbye!\n"), add = TRUE)
+  
+  if (x) {
+    return(10)
+  } else {
+    stop("Error")
+  }
+}
+
+j06(TRUE)
+j06(FALSE)
+```
+
+ALWAYS set `add = TRUE`: else each call to `on.exit()` will overwrite previous exit handler. 
+
+R 3.4: `on.exit()` expressions run in order of creation.
+R 3.5: control by setting `after = TRUE/FALSE`.
+
+
+### exercise
+
+1. `load()` return?
+
+load() loads objects saved to disk in .Rdata files by save(). When run successfully, load() invisibly returns a character vector containing the names of the newly loaded objects. To print these names to the console, one can set the argument verbose to TRUE or surround the call in parentheses to trigger R’s auto-printing mechanism.
+
+2. 
+
+```{r}
+print(readr::write_csv(mtcars, here::here("mtcars.csv")))
+```
+
+
+3.
+
+4. 
+
+```{r}
+plot_pdf <- function(code) {
+  pdf("test.pdf")
+  plot(code)
+  on.exit(dev.off(), add = TRUE)
+  code
+}
+
+plot_pdf(mtcars)
+```
+
+
+5. 
+
+
+```{r}
+body(capture.output)
+```
+
+
+
+## 6.8. Function forms
+
+
+> Everything that exists is an object.
+> Everything that happens is a function call.
+- John Chambers
+
+Function call varieties:
+
+- prefix: function name comes before arguments.
+-- ex. `footy(a, b, c)`
+
+- infix: function name comes between arguments. Mainly mathematical operators, user-defined functions begin/end in `%`
+-- ex. `x + y`
+
+- replacement: functions that replace values by assignment.
+-- ex. `names(df) <- c("a", "b", "c")`
+
+- special: `if`, `for`, `[[`, etc.
+
+
+### 6.8.1: Rewriting to prefix form
+
+Every infix, replacement, special form can be rewritten in prefix form.
+
+
+
+```{r}
+x + y
+`+`(x, y)
+
+names(df) <- c("a", "b", "c")
+`names<-`(df, c("a", "b", "c"))
+
+for(i in 1:10) print(i)
+`for`(i, 1:10, print(i))
+```
+
+Functional programming
+
+```{r}
+add <- function(x, y) x + y
+
+lapply(list(1:3, 4:5), add , 3)
+## or instead use `+`
+lapply(list(1:3, 4:5), `+`, 3)
+```
+
+
+### 6.8.2: Prefix form
+
+Prefix arguments:
+
+- by position `help(mean)`
+- by partial matching `help(top = mean)`
+- by name `help(topic = mean)`
+
+
+
+```{r}
+k01 <- function(abcdef, bcde1, bcde2) {
+  list (a = abcdef, b1 = bcde1, b2 = bcde2)
+}
+
+str(k01(1, 2, 3))
+str(k01(2, 3, abcdef = 1))
+str(k01(2, 3, a = 1))
+```
+
+In general: use positional matching only for first one~two arguments. NEVER use partial matching!
+
+```{r}
+options(warnPartialMatchArgs = TRUE)
+```
+
+### 6.8.3: Infix functions
+
+Function comes inbetween arguments.
+
+Ex.
+
+`:`, `::`, `:::`, `$`, `^`, `*`, `!=`, `&&`, etc.
+
+Can define own via `%____%`
+
+```{r}
+`%+%` <- function(a, b) paste0(a, b)
+
+"new" %+% "string"
+```
+
+Need to excape special characters in string for defining function but not when actual call.
+
+```{r}
+`% %` <- function(a, b) paste(a, b)
+`%/\\%` <- function(a, b) paste(a, b)
+
+"a" % % "b"
+"c" %/\% "z"
+```
+Infix operators are composed left-to-right.
+
+`+` and `-` can be called with a single argument.
+
+
+### 6.8.4 Replacement functions
+
+Replacement functiosn act like they modify arguments in place >>> `xxx <-` 
+- Must have arguments `x` and `value`, must return modified object.
+
+```{r}
+`second<-` <- function(y, value) {
+  y[2] <- value
+  y
+}
+
+y <- 1:10
+second(y) <- 5L
+y
+
+y <- 1:10
+tracemem(y)
+second(y) <- 6L
+```
+
+Create modified copy rather than actually modify arguments in place. If replacement function needs additional arguments, place between `x` and `value`. The additional arguments should e supplied on the left. 
+
+```{r}
+`modify<-` <- function(y, position, value) {
+  y[position] <- value
+  y
+}
+
+modify(y, 1) <- 10
+y
+```
+
+
+Replacement with other functions translated using `*tmp*` local variable which is removed post-execution.
+
+
+### 6.8.5 Special forms
+
+All special forms are implemented as primitive functions (in C)
+
+Special forms also have prefix forms:
+
+`(x)` == `(`x))
+`{x}` == `{`x))
+
+`x[i]` == (`[`x, i))
+`x[[i]]` == (`[[`x, i))
+
+if (cond) true == (`if`(cond, true))
+for(var in seq) action == (`for`(var, seq, action))
+
+etc.
+
+Knowing name of function underlying special form is useful for getting docs. 
+
+?`(` rather than ?(
+
+### exercise 
+
+1.
+
+```{r}
+1 + 2 + 3
+
+`+`(`+`(1, 2), 3)
+
+1 + (2 + 3)
+`+`(1, `+`(2, 3))
+
+x <- c(1, 2, 3, 4, 5, 6, 7)
+n <- 3
+
+if (length(x) <= 5) x[[5]] else x[[n]]
+
+`if`(`<=`(length(x), 5), `[[`(x, 5), `[[`(x, n))
+```
+
+2. 
+
+```{r}
+x <- sample(replace = TRUE, 20, x = c(1:10, NA))
+y <- runif(min = 0, max = 1, 20)
+cor(m = "k", y = y, u = "p", x = x)
+```
+
+Argument rules: Exact match, partial match, position
+
+```{r}
+x <- sample(c(1:10, NA), size = 20, replace = TRUE)
+y <- runif(20, min = 0, max = 1)
+cor(x, y, use = "pairwise.complete.obs", method = "kendall")
+```
+
+3. 
+
+```{r}
+modify(get("x"), 1) <- 10
+
+## equivalent to:
+get("x") <- `modify<-`(get("x"), 1, 10)
+```
+
+There is no corresponding replacements function for `get()`. 
+
+
+4. Modify reandom location in vector
+
+```{r}
+`random<-` <- function(x, value) {
+  idx <- sample(length(x), 1)
+  
+  x[idx] <- value
+  x
+}
+
+`random<-`(c(4, 5, 6, 7), 10)
+
+x <- c(4, 5, 6, 7)
+random(x) <- 69L
+```
+
+5. 
+
+```{r}
+`+` <- function(a, b = 0L){
+  if (is.character(a) && is.character(b)) {
+    paste0(a, b)
+  } else {
+    base::`+`(a, b)  
+  }
+}
+
+# Test functionality
++ 1
+#> [1] 1
+1 + 2
+#> [1] 3
+"a" + "b"
+#> [1] "ab"
+
+c("a", "b", "c") + c("d", "e", "f")
+
+# Return back to the original `+` operator
+rm(`+`)
+```
+
+
+6. 
+
+```{r}
+repls <- apropos("<-", where = TRUE, mode = "function")
+repls
+
+repls_base <- repls[names(repls) == length(search())]
+repls_base
+
+repls_base_prim <- mget(repls_base, envir = baseenv()) %>% Filter(is.primitive, .) %>% names()
+repls_base_prim
+```
+
+
+7. Valid names for user-created infix functions?
+
+Wrap around with `%` but can't contain `%` inside.
+
+8. infix version of `xor()`
+
+```{r}
+`%xor%` <- function(a, b) {
+  xor(a, b)
+}
+
+TRUE %xor% TRUE
+FALSE %xor% TRUE
+```
+
+
+8.
+
+
+```{r}
+`%n%` <- function(a, b) {
+  base::intersect(a, b)
+}
+
+c(2, 4, 6, 8) %n% c(2, 5, 7, 9)
+```
+
+
+
+# 7 Environments
+
+Environment: Data structure that power scoping. Lexical scoping, namespaces, R6 classes, etc.
+
+
+## 7.2 Environment basics
+
+Environment: similar to named list with 4 exceptions
+
+- Every name must be unique.
+- Names in an environment are NOT ordered.
+- Environment has a parent.
+- Environments are not copied when modified.
+
+### 7.2.1: Basics
+
+Use `rlang::env()`, works like `list()` taking a set of name-value pairs.
+
+```{r}
+e1 <- env(
+  a = FALSE,
+  b = "a",
+  c = 2.3,
+  d = 1:3
+)
+
+e1[[1]]
+e1[c("a", "b")]
+```
+
+In Base R: use `new.env()`, use `$<-` to define values.
+
+Environment: associate or bind a set of names to a set of values. "A bag of names" with no implied order. Environments have reference semantics, when modified - they are modified in place and DONT create a copy. Environments can contain themselves.
+
+```{r}
+e1$d <- e1
+
+e1 ## only display memory address...
+env_print(e1) ## more info
+
+## find character vector of current bindings
+env_names(e1)
+```
+
+For Base R: use `names()` (for R 3.2.0 and greater).
+
+
+### 7.2.2: Important environments
+
+Current environment: `current_env()` is environment in which code is currently executing.
+
+Global environment: `global_env()` is enrivonment for when experimenting interactively. "Workspace" where all interactive computation (outside of function) take place.
+
+For environment comparison use `identical()` as `==` is vectorized operator. Environments are NOT vectors.
+
+```{r}
+identical(global_env(), current_env())
+```
+
+Base R: `globalenv()` (printed as `Rf_GlobalEnv` and `.GlobalEnv`) and `environment()`.
+
+### 7.2.3: Parents
+
+Every environment has a parent. Parent used to implement lexical scoping. IF name is not found in an environment, R then checks in the parent. Set parent environment by supplying an unnamed argument to `env()`, otherwise default to current environment. 
+
+```{r}
+e2a <- env(d = 4, e = 5)
+e2b <- env(e2a, a = 1, b = 2, c = 3)
+
+env_print(e2b)
+
+env_parent(e2b)
+env_parent(e2a)
+
+env_parents(e2b)
+```
+
+Empty environment: Has NO parent. `R_EmptyEnv`. Every environment eventually terminate an empty environment. By default, `env_parents()` stops at global environment. Ancestors of global environment include every attached package.
+
+Base R: Use `parent.env()`. 
+
+
+### 7.2.4: Super assignment
+
+- Regular assignment `<-` creates variable in current environment. 
+- Super assignment `<<-` modifies existing variable found in parent environment.
+
+If not find existing variable, will create in global environment. Global variables introduce non-obvious dependencies between functions. 
+
+
+### 7.2.5: Getting & Setting
+
+Similar to list, get + set elements of environment with `$` and `[[`:
+
+```{r}
+e3 <- env(x = 1, y = 2)
+e3$x
+e3$z <- 3
+e3[["z"]]
+
+env_get(e3, "abc")
+env_get(e3, "abc", default = NULL)
+```
+
+Returns `NULL` if binding does not exist. Set default with `default` argument. 
+
+Can NOT use `[[` with numeric indices or `[`.
+
+
+`env_poke()`: take name as string and a value:
+
+```{r}
+env_poke(e3, "a", 100)
+e3$a
+```
+
+`env_bind()`: Bind multiple values:
+
+
+```{r}
+env_bind(e3, a = 10, b = 20)
+env_names(e3)
+```
+
+`env_has()`: determine if environment has binding: 
+
+```{r}
+env_has(e3, "a")
+```
+
+Unlike lists, setting element == `NULL` does NOT remove it. Sometimes you want a name that refers to `NULL`. Use `env_unbind()` instead.
+
+```{r}
+e3$a <- NULL
+env_has(e3, "a")
+
+env_unbind(e3, "a")
+env_has(e3, "a")
+```
+
+Unbinding does NOT delete object >> garbage collector.
+
+Base R: `get()`, `assign()`, `exists()`, `rm()` for current environment.
+
+### 7.2.6: Advanced bindings
+
+`env_bind_lazy()`: Creates "delayed bindings" - which are evaluated the first time they are accessed. Delayed bindings create promises, behave similarly to function arguments. 
+
+```{r}
+env_bind_lazy(current_env(), b = {Sys.sleep(1); 1})
+
+system.time(print(b))
+system.time(print(b))
+```
+
+Main use for `autoload()`, allows R packages to provide datasets that behave as though loaded in memory even though only loaded from disk when needed.
+
+`env_bind_active()`: Creates "active bindings" - re-computed every time they're accessed. Used to implement R6's active fields. 
+
+```{r}
+env_bind_active(current_env(), z1 = function(val) runif(1))
+
+z1
+z1
+```
+
+Base R: `delayedAssign()` and `makeActiveBinding()`.
+
+
+### exercise
+
+
+1. Differences: Environments vs. lists
+
+- Environments have reference semantics (do NOT copy-on-modify)
+- Environments have parents
+- Environment elements are NOT ordered
+- Environment elements must have unique names
+
+2. 
+
+```{r}
+e1 <- env()
+e1$loop <- e1
+
+env_print(e1)
+```
+
+
+3. 
+
+```{r}
+e1 <- env()
+e2 <- env()
+
+e1$loop <- e2
+e2$dedoop <- e1
+
+env_print(e1)
+env_print(e2)
+```
+
+4. 
+
+```{r}
+env_print(e1)
+```
+
+
+Environments have no ordered elements. Environments return 2 objects at the same time.
+
+
+5. Single assignment for `env_poke()`
+
+
+```{r}
+env_poke2 <- function(env, name, value) {
+  if (env_has(env, name)) {
+    abort(paste0("\"", name, "\" is already assigned to a value."))
+  }
+
+  env_poke(env, name, value)
+  invisible(env)
+}
+
+# Test
+env_1 <- env(a = 1)
+env_poke2(env_1, "b", 2)
+env_names(env_1)
+#> [1] "a" "b"
+env_poke2(env_1, "b", 2)
+#> Error: "b" is already assigned to a value.
+```
+
+
+6. 
+
+```{r}
+rebind <- function(name, value, env = caller_env()) {
+  if (identical(env, empty_env())) {
+    stop("Can't find `", name, "`", call. = FALSE)
+  } else if (env_has(env, name)) {
+    env_poke(env, name, value)
+  } else {
+    rebind(name, value, env_parent(env))
+  }
+}
+rebind("a", 10)
+#> Error: Can't find `a`
+a <- 5
+rebind("a", 10)
+a
+#> [1] 10
+```
+
+
+The primary differnce between rebind() and <<- is that rebind() will only carry out an assignment when it finds an existing binding; unlike <<- it will never create a new one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions.
+
+
+
+## 7.3 Recursing over environments
+
+Recursive function: operate on every ancestor of an environment. 
+
+- `where()`:
+
+```{r}
+where <- function(name, env = caller_env()) {
+  if (identical(env, empty_env)) {
+    stop("Can't find ", name, call. = FALSE)
+  } else if (env_has(env, name)) {
+    env
+  } else {
+    where(name, env_parent(env))
+  }
+}
+```
+
+Base: Reached empty environment and haven't found binding >>> throw error.
+Success: Name exists in this environment >>> return environment
+Recursive: Name not found in environment >>> try parent environment
+
+```{r}
+where("yyy")
+
+x <- 5
+where("x")
+
+where("mean")
+```
+
+Iterative version:
+
+```{r}
+f2 <- function(..., env = caller_env()) {
+  while (!identical(env, empty_env))) {
+    if (success) {
+      return()
+    }
+    env <- env_parent(env)
+  }
+  ## base case
+}
+```
+
+
+
+### exercise
+
+1. 
+
+```{r}
+where2 <- function(name, env = caller_env(), results = list()) {
+  if (identical(env, empty_env())) {
+    # Base case
+    results
+  } else {
+    # Recursive case
+    if (env_has(env, name)) {
+      results <- c(results, env)
+    }
+    where2(name, env_parent(env), results)
+  }
+}
+
+# Test
+e1a <- env(empty_env(), a = 1, b = 2)
+e1b <- env(e1a, b = 10, c = 11)
+e1c <- env(e1b, a = 12, d = 13)
+
+where2("a", e1c)
+```
+
+
+
+
+2. 
+
+
+```{r}
+fget <- function(name, env = caller_env(), inherits = TRUE) {
+  # Base case
+  if (env_has(env, name)) {
+    obj <- env_get(env, name)
+
+    if (is.function(obj)) {
+      return(obj)
+    }
+  }
+
+  if (identical(env, emptyenv()) || !inherits) {
+    stop("Could not find function called \"", name, "\"",
+         call. = FALSE)
+  }
+
+  # Recursive Case
+  fget(name, env_parent(env))
+}
+
+# Test
+mean <- 10
+fget("mean", inherits = TRUE)
+#> function (x, ...) 
+#> UseMethod("mean")
+#> <bytecode: 0x1899b78>
+#> <environment: namespace:base>
+```
+
+
+
+
+
+
+## 7.4 Special environments
+
+
+Most environments are created by R rather than the user. 
+
+
+### 7.4.1: Package environments and search path
+
+Each package attached by `library()` or `require()` becomes one of the parents of the global environment. Immediate parent of the global environment is the LAST package that was attached, then the second to last, etc.
+
+Search path: order of packages attached, can be found from top-level interactive workspace.
+
+```{r}
+search()
+
+search_envs()
+```
+
+Last 2 environments on search path are always the same:
+-`Autoloads` environment: uses delayed bindings to save memory by only loading package objects when needed
+- `base` environment: package:base. Access with `base_env()`
+
+
+### 7.4.2: Function environment
+
+A function binds the current environment when it is created, used for lexical scoping. Across computer languages, functions that capture/enclose their environments are called `closures`.
+
+```{r}
+y <- 1
+f <- function(x) x + y 
+
+fn_env(f)
+```
+
+Base R: use `environment()`
+
+
+### 7.4.3: Namespaces 
+
+- Prevent packages from finding different functions if loaded in different order. Every package works the same way regardless of what packages are attached by the user, and their order. 
+
+```{r}
+sd
+```
+
+Every function in a package is associated with a PAIR of environments
+
+- Package environment: external interface to the package. Parent determined by search path. How user finds a function in an attached package or with `::`. Controls how we find function.
+- Namespace environment: internal interface to the package. Controls how function finds its variables. 
+
+Every binding in package environment is also found in namespace environment. Ensures EVERY function can use every other function in the package. Some bindings only occur in the namespace environment >> internal or non-exported objects. Allows for hide internal implementation details from the user.
+
+Every namespace environment has same set of ancestors:
+
+- `imports` environment that contains bindings to all functions used by the package. Imports environment is controlled with the `NAMESPACE` file.
+- Parent of the imports environment is the `base namespace`. Contains same bindings as the base environment but has different parent.
+- Global environment: Parent of `base namespace`. If binding isn't defined in imports environment, the package willl look in usual way, up the parents. 
+
+Argument value found in sequence of environments determined by package developer, NOT the user. Code always works same way regardless of what packages have been attached by the user. 
+
+
+### 7.4.4: Execution environments
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
