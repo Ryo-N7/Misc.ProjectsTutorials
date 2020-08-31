@@ -3182,25 +3182,389 @@ Argument value found in sequence of environments determined by package developer
 
 ### 7.4.4: Execution environments
 
+```{r}
+g <- function(x) {
+  if (!env_has(current_env(), "a")) {
+    message("Defining a")
+    a <- 1
+  } else {
+    a <- a + 1
+  }
+  a
+}
+```
+
+Returns SAME, every run due to 'fresh start principle'. Each tie the function is called, a new environment is created to host its execution. 
+
+To have function environment stay longer:
+- Explicitly return it: `current_env()`
+- Return an object with a binding to that environment, ex. function >>> function factory
+
+### exercise
+
+1. 
+
+```{r}
+search_envs() # returns global, ALL environments on search path. 
+
+env_parents(global_env()) # not return global, empty included. List ALL ancestors of global environment
+```
 
 
 
+## 7.5 Call stacks
+
+Caller environment: accessed with `rlang::caller_env()`. Provides environment from which function was called and varies based on how function is called, NOT how function was created. 
+
+Base R: `parent.frame()`
+
+
+Executing function creates two types of context:
+- Execution environment is child of function environment is de etermined by WHERE function was CREATED.
+- Call stack created by WHERE function was CALLED. 
+
+
+### 7.5.1: Simple call stacks
+
+`f()` calls `g()` calls `h()`
+
+```{r}
+f <- function(x) {
+  g(x = 2)
+}
+
+g <- function(x) {
+  h(x = 3)
+}
+
+h <- function(x) {
+  stop()
+}
+
+f(x = 1)
+traceback()
+```
+
+Use `lobstr::cst()`: opposite order from `traceback(). Sequence of calls from beginning rather than end.
+
+```{r}
+h <- function(x) {
+  lobstr::cst()
+}
+
+f(x = 1)
+```
+
+### 7.5.2: Lazy evaluation
+
+```{r}
+a <- function(x) b(x)
+b <- function(x) c(x)
+c <- function(x) x
+
+a(f())
+```
+
+x is laziy evaluated so two separate branches. 
+
+- Branch #1: `a()` calls `b()`,  then `b()` calls `c()`
+- Branch #2: When `c()` evaluates its argument `x`. Argument evaluated in new branch as environment in which it is evaluated is the global environment, NOT environment of `c()`. 
+
+### 7.5.3: Frames
+
+Frame: each element of a call stack, evaluation context. 
+
+3 key components: 
+- Expression `expr` giving function call. What `traceback()` prints out.
+- Environment `env` typically execution environment of a function. 
+-- 2 exceptions: Global frame == global environment. Calling `eval()` generates frames where environment can be anything
+- Parent: the previous call in the call stack.
 
 
 
+### 7.5.4: Dynamic scope
+
+Dynamic scoping: Looking up variables in the calling stack > enclosing environment
+
+Dynamic scoping makes it harder to reason about how a function operates. Need to know how it was defined AND know context in which it is called. 
 
 
+### exercise
 
 
+```{r}
+ls(all.names = TRUE)
+
+ls2 <- function(env = caller_env()) {
+  sort(env_names(env))
+}
+
+ls2()
+```
+
+## 7.6 As data structures
 
 
+Environments useful as data structures as they have reference semantics. 
+
+- Avoid copies of large data: Environments have reference semantics so never accidentally create a copy. Use `R6` objects as bare environments are difficult to work with.
+
+- Managing state within a package: Explicit environments are useful in packages as can maintain state across function calls. Objects in packages are locked - can't modify directly.
+
+```{r}
+my_env <- new.env(parent = emptyenv())
+my_env$a <- 1
+
+get_a <- function() {
+  my_env$a
+}
+
+set_a <- function(value) {
+  old <- my_env$a
+  my_env$a <- value
+  invisible(old)
+}
+
+set_a(5)
+
+my_env$a
+```
+
+- Hashmap: data structure that takes a constant, `O(1)`, time to find object based on its name. 
 
 
+# 8 Conditions
+
+Condition system: provides a paired set of tools that allow author of cuntion to indicate something unusual is happening >> tells user of function to deal with it.
+
+- Function author signals conditions with functions like `stop()`, `warning()`, `message()`, then the function user can handle them with functions like `tryCatch()` and `withCallingHandlers()`. 
+
+- Signal conditions from functions created AND handle conditions signalled by the functions called
+
+R base conditions system on Common Lisp. 
+
+## 8.2 Signalling conditions
+
+3 conditions that you can signal in code: errors, warnings, messages
+
+- Errors: most severe, indicate that no way for function to continue, must stop.
+- Warnings: Indicate that something has gone wrong but function has partially recovered
+- Message: Inform users that some action has been performed on their behalf.
+
+Interrupt: User interrupted execution by pressing `Esc`, `Ctrl+Break`, `Ctrl+C`. 
+
+### 8.2.1: Errors
+
+Base R: `stop()`
+
+By default, error message includes the call, but typicall not useful. Use `traceback()`. Use `call. = FALSE` to not include call.
+
+{rlang} equivalent: `abort()`, use `glue::glue()` for construct complex error messages.
+
+```{r}
+h <- function() abort("This is an error!")
+h()
+```
+
+Error mesages: Describe what is wrong + point towards fixing problem.
+- Difficulty from developer and user to imagine other perspective.
+
+### 8.2.2: Warnings 
+
+Warnings: signal something gone wrong but code recover and continue. Can have multiple warnings in a single function call.
+
+```{r}
+fw <- function() {
+  cat("1\n")
+  warning("W1")
+  cat("2\n")
+  warning("W2")
+  cat("3\n")
+  warning("W3")
+}
+
+fw()
+```
+
+`option()`: 
+
+- `warn = 1`: warnings appear immediately
+- `warn = 2`: warnings into errors
+- `warn = 0`: restore default behavior
+
+- suppress call with `call. = FALSE` argument
+- {rlang}: `warn()`
+
+- Deprecate function: allow older code to continue but encourage usage of new function
+- Recovery: If certain that can recover from problem, otherwise throw error.
 
 
+### 8.2.3: Messages
+
+Messages: informational, tell users something done on their behalf. Displayed immediately and do not have `call.` argument.
+
+- Default argument requires some non-trivial amount of computation >>> tell user what value was used. Ex. {ggplot2} reports # of bins if no `binwidth` supplied.
+
+- Functions called primarily for side-effects which would otherwise be silent. Ex. Files to disk, web API, writing to DB >>> provide status messages to tell what's happening to user. 
+
+- Long running process with no intermediate output >>> progress bar may be better.
+
+- Display message when package is loaded `packageStartupMessage()`
+
+Any function producing message should provide some way to suppress it. 
+
+- `cat()`: WHen primary role of function is to print to console.
+-- Ex. `print()`, `str()` methods
+
+- `message()`: Print to console when primary purpose of function is something else.
+
+`cat()` is for when user ASKS for something to be printed. `message()` for when developer `elects()` to print something. 
 
 
+### exercise 
 
+1. 
+
+```{r}
+file_remove_strict <- function(path) {
+  if (!file.exists(path)) {
+    stop("Can't delete the file '", path, "' because it doesn't exist.",
+         call. = FALSE)
+  }
+  file.remove(path)
+}
+```
+
+
+2. 
+
+The appendLF argument automatically appends a new line to the message.
+
+```{r}
+multiline_msg <- function(appendLF = TRUE) {
+  message("first", appendLF = appendLF)
+  cat("second")
+  cat("third")
+}
+
+multiline_msg(appendLF = TRUE)
+#> first
+#> secondthird
+multiline_msg(appendLF = FALSE)
+#> first
+#> secondthird
+```
+
+
+## 8.3 Ignoring conditions
+
+- `try()`: ignore errors
+- `suppressWarnings()`: ignore warnings
+- `suppressMessages()`: ignore messages
+
+`try()`: allows for execution to continue even after error occur. Error message will display. Do assignment in call, define a default value to be used IF code NOT succeed. Argument evaluated in calling environment and NOT inside function.
+
+```{r}
+default <- NULL
+try(default <- read.csv("blah-blah.csv"), silent = TRUE)
+default
+```
+
+## 8.4 Handling conditions
+
+Every condition has default behavior. Condition handlers allow temporary override/supplement to default behavior.
+
+`tryCatch()` & `withCallingHandlers()`: Register handlers - functiosn that take signalled conditoin as their single argument.
+
+```{r}
+tryCatch(
+  error = function(cnd) {
+    # code to run when error is thrown
+  },
+  code_to_run_while_handlers_are_active
+)
+
+withCallingHandlers(
+  warning = function(cnd) {
+    # code to run when warning signalled
+  },
+  message = function(cnd) {
+    # code to run when message signalled
+  },
+  code_to_run_while_handlers_are_active
+)
+```
+
+
+- `tryCatch()`: defines exiting handlers, after condition is handled, control returns to context where `tryCatch()` was called. Most suitable for workign with errors + interrupts.
+
+- `withCallingHandlers()`: defines calling handlers - after condition is captured, control returns to context where condition was signalled. Most suitable for working with non-error conditions.
+
+Condition objects: created implicitly when signal condition, becomes explicit inside handler.
+
+### 8.4.1: Condition objects
+
+`rlang::catch_cnd()`: view condition object by catching from signalled condition
+
+```{r}
+cnd <- catch_cnd(stop("an error"))
+
+str(cnd)
+```
+
+- Build-in conditions are lists with two elements:
+-- message: length-1 character ector containing text to display to user >> extract with `conditionMesasge(cnd)`
+-- call: call which triggered the condition >> extract with `conditionCall(cnd)`
+
+- Conditions have "class" attribute (character vector) >>> S3 objects. Determines which nalders will match the condition.
+
+### 8.4.2: Exiting handlers 
+
+`tryCatch()` registers exiting handlers >>> allows override default error behavior. 
+
+```{r}
+f3 <- function(x) {
+  tryCatch(
+    error = function(cnd) NA,
+    log(x)
+  )
+}
+
+## return NA instead of throw error
+f3("x")
+```
+
+If NO conditions signalled OR class of signalled condition NOT match handler name, code executes normally. 
+
+Handlers set up by `tryCatch()` called exiting handlers: After condition is signalled, control passes to the handler and never returns to the original code - effectively the code exits at this point.
+
+```{r}
+tryCatch(
+  message = function(cnd) "There",
+  {
+    message("Here")
+    stop("This code is never run!")
+  }
+)
+```
+
+Protected code is evaluated in environment of `tryCatch()` but handler code is NOT as handlers are functions. 
+
+Handler function has single argument, condition object `cnd`. Useful when create own custom conditions. 
+
+```{r}
+tryCatch(
+  error = function(cnd) {
+    paste0("-haha-", conditionMessage(cnd), "-haha-")
+  },
+  stop("This is an error")
+)
+```
+
+`finally` argument: Specifies block of code to run regardless of whether initial expression succeeds or fails. Ex. clean up: delete files, close connections, etc. Equivalent to `on.exit()`.
+
+
+### 8.4.3: Calling handlers
 
 
 
