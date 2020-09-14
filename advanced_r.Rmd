@@ -3566,6 +3566,465 @@ tryCatch(
 
 ### 8.4.3: Calling handlers
 
+`withCallingHandlers()`: set up calling handlers, code execution continues normally once the handler returns. Use for non-error conditions. 
+
+- Exiting handler: Handles signal by making problem go away
+- Calling handler: Handles signal by keeping it.
+
+Handlers are applied in order. 
+
+```{r}
+tryCatch(
+  message = function(cnd) cat("Caught a message!\n"),
+  {
+    message("Someone there?")
+    message("Why, yes!")
+  }
+)
+
+withCallingHandlers(
+  message = function(cnd) cat("Caught a message!\n"),
+  {
+    message("Someone there?")
+    message("Why, yes!")
+  }
+)
+```
+
+Return value of a calling handler is ignored because the code continuse to execute after handler completes. Handlers only useful for side-effects.
+
+Muffle: Prevent condition from bubbbling up to parent handlers but still run rest of code in block, explicitly muffle it with `rlang::cnd_muffle()`
+
+
+
+### 8.4.4: Call stacks
+
+Call statcks of exiting and calling handlers are different!
+
+```{r}
+f <- function() g()
+g <- function() h()
+h <- function() message("!")
+```
+
+* Calling handlers: called in context of the call that signalled the condition
+* Exiting handlers: called in context of the call to `tryCatch()`
+
+```{r}
+withCallingHandlers(f(), message = function(cnd) {
+  lobstr::cst()
+  cnd_muffle(cnd)
+})
+
+tryCatch(f(), message = function(cnd) lobstr::cst())
+```
+
+
+### exercise 
+
+1. Info from `abort()` vs. `stop()`?
+
+```{r}
+?abort()
+?stop()
+```
+
+`abort()`: does not include call info by default. Backtrace always saved into error objects. Supply metadata `...` arg, create classed condition `class` arg. 
+
+2. 
+
+```{r}
+show_condition <- function(code) {
+  tryCatch(
+    error = function(cnd) "error",
+    warning = function(cnd) "warning",
+    message = function(cnd) "message",
+    {
+      code
+      NULL
+    }
+  )
+}
+```
+
+
+```{r}
+show_condition(stop("!"))
+show_condition(10)
+show_condition(warning("?!"))
+show_condition({
+  10
+  message("?")
+  warning("?!")
+})
+```
+
+3. 
+
+```{r}
+withCallingHandlers(
+  message = function(cnd) message("b"),
+  withCallingHandlers(
+    message = function(cnd) message("a"),
+    message("c")
+  )
+)
+```
+
+`message()` shows message but also keeps running rest of the code. b > a then b > c
+
+4. 
+
+`catch_cnd()`: captures any condition signalled while evaluating its argument. Useful when expect specific condition to be signalled for debugging/unit testing.
+
+```{r}
+catch_cnd(10)
+catch_cnd(abort("errores"))
+catch_cnd(signal("condiciones", message = "mamma mia"))
+```
+5. 
+
+```{r}
+show_condition <- function(code) {
+  tryCatch(
+    error = function(cnd) "error",
+    warning = function(cnd) "warning",
+    message = function(cnd) "message",
+    {
+      code
+      NULL
+      cnd_muffle("cnd")
+    }
+  )
+}
+
+show_condition(stop("!"))
+show_condition(10)
+show_condition(warning("?!"))
+show_condition({
+  10
+  message("?")
+  warning("?!")
+})
+```
+
+## 8.5 Custom conditions
+
+Most functions generate one of the built-in conditions >> contain only message and call. If want to detect a certain type of error >> can only work with TEXT of the error message. Messages can change and translation issues. However, can create custom conditions containing useful metadata. Use `rlang::abort()` to supply `.subclass` and other metadata. 
+
+
+### 8.5.1: Motivation
+
+`base::log()`: absolute minimum for errors caused by invalid args.
+
+```{r}
+log(letters)
+log(1:10, base = letters)
+```
+
+Be more explicit about WHICH argument is the problem and say what the problematic input is. 
+
+```{r}
+my_log <- function(x, base = exp(1)) {
+  if (!is.numeric(x)) {
+    abort(paste0(
+      "'x' must be a numeric vector; not ", typeof(x), "."
+    ))
+  }
+  if (!is.numeric(base)) {
+    abort(paste0(
+      "'base' must be a numeric vector; not ", typeof(base), "."
+    ))
+  }
+  base::log(x, base = base)
+}
+
+my_log(letters)
+my_log(1:10, base = letters)
+```
+
+### 8.5.2: Signalling
+
+Still all metadata about error is in single string... need to build more infrastructure. Create custom `abort()` function for bad arguments. Create nice error message for user and store metadata in the condition call for the developer. 
+
+```{r}
+abort_bad_argument <- function(arg, must, not = NULL) {
+  msg <- glue::glue("'{arg}' must {must}")
+  if (!is.null(not)) {
+    not <- typeof(not)
+    msg <- glue::glue("{msg}; not {not}")
+  }
+  abort("error_bad_argument",
+        message = msg,
+        arg = arg,
+        must = must, 
+        not = not)
+}
+
+my_log <- function(x, base = exp(1)) {
+  if (!is.numeric(x)) {
+    abort_bad_argument("x", must = "be numeric", not = x)
+  }
+  if (!is.numeric(base)) {
+    abort_bad_argument("base", must = "be numeric", not = base)
+  }
+  base::log(x, base = base)
+} 
+
+my_log(letters)
+my_log(1:10, base = letters)
+```
+
+### 8.5.3: Handling
+
+Same interactive error messages but much easier to program with. 
+
+Capture error, then assert it has structure we expect:
+
+```{r}
+library(testthat)
+
+err <- catch_cnd(my_log("a"))
+
+err
+
+expect_s3_class(err, "error_bad_argument")
+expect_equal(err$arg, "x")
+expect_equal(err$not, "character")
+```
+
+
+Class: `error_bad_argument` in `tryCatch()` to only handle that specific error:
+
+```{r}
+tryCatch(
+  error_bad_argument = function(cnd) "bad_argument",
+  error = function(cnd) "other error",
+  my_log("a")
+)
+```
+
+For `tryCatch()` with multiple handlers and custom classes, the FIRST handler to match any class in signal's class vector is called, not necessarily the best match. So necessary to put most specific handlers first.
+
+
+### exercise 
+
+
+1.
+
+```{r}
+check_installed <- function(package) {
+  if (!requireNamespace(package, quietly = FALSE)) {
+    abort(
+      "error_pkg_not_found",
+      message = paste0("package '", package, "' not installed."),
+      package = package
+    )
+  }
+  TRUE
+}
+
+check_installed("ggplot2")
+check_installed("ggplot69")
+
+```
+
+2. Inside a package you often need to stop with an error when something is not right. Other packages that depend on your package might be tempted to check these errors in their unit tests. How could you help these packages to avoid relying on the error message which is part of the user interface rather than the API and might change without notice?
+
+Instead returning an error it might be preferable to throw a customized condition and place a standardized error message inside the metadata. Then the downstream package could check for the class of the condition, rather than inspecting the message.
+
+## 8.6 Applications
+
+### 8.6.1: Failure value
+
+Wrapper to return a default if error occurs:
+
+```{r}
+fail_with <- function(expr, value = NULL) {
+  tryCatch(
+    error = function(cnd) value, 
+    expr
+  )
+}
+
+fail_with(log(10), NA_real_)
+fail_with(log("a"), NA_real_)
+```
+
+### 8.6.2: Success and failure values
+
+`success_val` and `error_val` 
+
+```{r}
+foo <- function(expr) {
+  tryCatch(
+    error = function(cnd) error_val,
+    {
+      expr
+      success_val
+    }
+  )
+}
+```
+
+
+### 8.6.3: Resignal 
+
+Return default values when condition is signalled, handlers used to make more informative error messages.
+
+Ex. warnings into errors
+
+```{r}
+warning2error <- function(expr) {
+  withCallingHandlers(
+    warning = function(cnd) abort(conditionMessage(cnd)),
+    expr
+  )
+}
+
+warning2error({
+  x <- 2 ^ 4
+  warn("Hello!")
+})
+```
+
+
+### 8.6.4: Record
+
+Record conditiosn for later investigation. Modify object in place and not return values.
+
+```{r}
+catch_cnds <- function(expr) {
+  conds <- list()
+  add_cond <- function(cnd) {
+    conds <<- append(conds, list(cnd))
+    cnd_muffle(cnd)
+  }
+  withCallingHandlers(
+    message = add_cond,
+    warning = add_cond,
+    expr
+  )
+  conds
+}
+
+catch_cnds({
+  inform("a")
+  warn("b")
+  inform("c")
+})
+```
+
+Also capture errors: 
+
+
+```{r}
+catch_cnds <- function(expr) {
+  conds <- list()
+  add_cond <- function(cnd) {
+    conds <<- append(conds, list(cnd))
+    cnd_muffle(cnd)
+  }
+  tryCatch(
+    error = function(cnd) {
+      conds <<- append(conds, list(cnd))
+    },
+    withCallingHandlers(
+      message = add_cond,
+      warning = add_cond,
+      expr
+    )
+  )
+  conds
+}
+
+catch_cnds({
+  inform("a")
+  warn("b")
+  abort("C")
+})
+```
+
+
+### 8.6.5: No default behavior
+
+Signal condition that doesn't inherit from `message`, `warning`, or `error`. Condition has no effect unless user specifically request it. 
+
+```{r}
+log <- function(message, level = c("info", "error", "fatal")) {
+  level <- match.arg(level)
+  signal(message, "log", level = level)
+}
+
+## no default handler...
+log("This code was run") 
+```
+
+Activate logging >>> do something for "log" condition.
+
+```{r}
+record_log <- function(expr, path = stdout()) {
+  withCallingHandlers(
+    log = function(cnd) { ## define what to do for `log` condition
+      cat(
+        "[", cnd$level, "]", cnd$message, "\n", sep = "", 
+        file = path, append = TRUE
+      )
+    },
+    expr
+  )
+}
+
+record_log(log("Hello there!"))
+```
+
+Suppress certain log levels:
+
+```{r}
+ignore_log_levels <- function(expr, levels) {
+  withCallingHandlers(
+    log = function(cnd) {
+      if (cnd$level %in% levels) {
+        cnd_muffle(cnd)
+      }
+    },
+    expr
+  )
+}
+
+record_log(ignore_log_levels(log("Hello there!"), "info"))
+```
+
+
+
+### exercise 
+
+Catch errors but suppress error message. 
+
+```{r}
+suppressErrors <- function(expr) {
+  tryCatch(
+    error = function(cnd) invisible(cnd),
+    interrupt = function(cnd) stop("Terminated by the user",
+                                   call. = FALSE),
+    expr
+  )
+}
+
+suppressConditions <- function(expr) {
+  suppressErrors(suppressWarnings(suppressMessages(expr)))
+}
+
+error_obj <- suppressConditions({
+    message("message")
+    warning("warning")
+    abort("error")
+  })
+
+error_obj
+```
+
+2. 
 
 
 
@@ -3573,6 +4032,378 @@ tryCatch(
 
 
 
+# Functional Programming
+
+First-class functions: functions that behave like any other data structure. Do same things with function as you do with a vector. Assign as variables, store in list, pass as arguments to other functions, create inside functions, return as result of function, etc.
+
+Pure: 
+- output ONLY depends on inputs. If called with same inputs always produce the same outputs. Exclude `runif()`, `Sys.time()`, etc.
+- Has NO side-effects, no changing value of a global variable, no writing to disk, no display to screen. Exclude `print()`, `<-`, etc.
+
+## Functional style
+
+Decomposing a big problem into smaller pieces. Operate independently. 
+
+
+# 9 Functionals 
+
+Functional: Function that takes function as input and returns vectors as output. 
+
+```{r}
+randomize <- function(f) f(runif(1e3))
+
+randomize(mean)
+randomize(mean)
+randomize(mean)
+randomize(sum)
+```
+
+Replace `for` with functionals. 
+
+## 9.2 `map()`
+
+`purrr::map()`: takes vector and function >>> calls function once for each element of the vector and returns results in list. 
+
+`map(1:3, f)` == `list(f(1), f(2), f(3))`
+
+```{r}
+triple <- function(x) x * 3
+map(1:3, triple)
+```
+
+- Allocate a list the same length as input, then fill in the list with a `for` loop. 
+
+```{r}
+simple_map <- function(x, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], ...)
+  }
+  out
+}
+```
+
+`map()` written in C, preserves names, supports shortcuts.
+
+Base R: `lapply()`. 
+
+### 9.2.1: Producing atomic vectors 
+
+Simpler variants of `map()` to return atomic vector of different types: `map_lgl()`, `map_int()`, `map_dbl()`, `map_chr()`. 
+
+All map functions always return an output vector the same length as the input >>> implies each call to `.f` must return a single value. If not >>> ERROR.
+
+Base R: `sapply()` and `vapply()`. Avoid `sapply()` as simplify result into list, vector, or matrix. `vapply()` use `FUN.VALUE` to describe output shape.
+
+```{r}
+x <- c(25, 40, 585, 48, 202, 2)
+
+map_dbl(x, mean, na.rm = TRUE)
+
+vapply(x, mean, na.rm = TRUE, FUN.VALUE = double(1))
+```
+
+
+### 9.2.2: Anonymous functions & shortcuts 
+
+Use inline anonymous functions instead of existing functions. 
+
+```{r}
+map_dbl(mtcars, function(x) length(unique(x)))
+```
+
+Shortcut `~`
+
+```{r}
+map_dbl(mtcars, ~ length(unique(x)))
+```
+
+Shortcuts for extracting elements from a vector >>> `purrr::pluck()`. Use character vector to select elements by name, integer vector to select by position, list to select by both name and position. Useful for nested lists >> JSON.
+
+```{r}
+x <- list(
+  list(-1, x = 1, y = c(2), z = "a"),
+  list(-2, x = 4, y = c(5, 6), z = "b"),
+  list(-3, x = 8, y = c(9, 10, 11))
+)
+
+map_dbl(x, "x")
+map_dbl(x, 1)
+map_dbl(x, list("y", 2), .default = NA)
+```
+
+### 9.2.3: Passing arguments with `...`
+
+Pass additional arguments.
+
+```{r}
+x <- list(1:5, c(1:10, NA))
+map_dbl(x, ~ mean(.x, na.rm = TRUE))
+map_dbl(x, mean, na.rm = TRUE)
+```
+
+Any arguments after `.f` the function are inserted after the data in individual calls to `f()`
+
+### 9.2.4: Argument names
+
+Write out full argument names in code for better understanding. Be careful of `f` and `x` arguments as they can clash, `purrr()` uses `.f` and `.x` to avoid such mishaps.
+
+### 9.2.5: Varying another argument
+
+First argument of `map()` >>> first argument of function. BUT what if want first argument to be a constant and vary a different argument?
+
+Use anonymous function to rearrange the argument order:
+
+```{r}
+trims <- c(0, 0.1, 0.2, 0.5)
+x <- rcauchy(1000)
+
+map_dbl(trims, ~ mean(x, trim = .x))
+map_dbl(trims, function(trim) mean(x, trim = trim))
+```
+
+### exercise 
+
+1. `as_mapper()`
+
+map() offers multiple ways (functions, formulas and extractor functions) to specify the function argument (.f). Initially, the various inputs have to be transformed into a valid function, which is then applied. The creation of this valid function is the job of as_mapper() and it is called every time map() is used.
+
+Given character, numeric or list input as_mapper() will create an extractor function. Characters select by name, while numeric input selects by positions and a list allows a mix of these two approaches. This extractor interface can be very useful, when working with nested data.
+
+The extractor function is implemented as a call to purrr::pluck(), which accepts a list of accessors (accessors “access” some part of your data object).
+
+
+2. `map(1:3, ~ runif(2))` vs. `map(1:3, runif(2))`
+
+The first pattern creates multiple random numbers, because ~ runif(2) successfully uses the formula interface. Internally map() applies as_mapper() to this formula, which converts ~ runif(2) into an anonymous function. Afterwards runif(2) is applied three times (one time during each iteration), leading to three different pairs of random numbers.
+
+```{r}
+map(1:3, ~ runif(2))
+```
+
+
+In the second pattern runif(2) is evaluated once, then the results are passed to map(). Consequently as_mapper() creates an extractor function based on the return values from runif(2) (via pluck()). This leads to three NULLs (pluck()’s .default return), because no values corresponding to the index can be found.
+
+```{r}
+map(1:3, runif(2))
+```
+
+3. 
+
+```{r}
+map_dbl(mtcars, ~ sd(.))
+
+mtcars_num <- map_lgl(mtcars, is.numeric)
+map_dbl(mtcars[mtcars_num], sd)
+
+mtcars_factor <- map_lgl(mtcars, is.factor)
+map_int(mtcars[mtcars_factor], ~ length(levels(.x)))
+```
+
+4. 
+
+```{r}
+trials <- map(1:100, ~ t.test(rpois(10, 10), rpois(10, 7)))
+
+library(ggplot2)
+
+trials_df <- tibble(p_value = map_dbl(trials, "p.value"))
+
+trials_df %>% 
+  ggplot(aes(x = p_value, fill = p_value < 0.05)) + 
+  geom_histogram(binwidth = .01) +
+  ggtitle("Distribution of p-values for random poisson data.")
+```
+
+
+5. 
+
+
+6.
+
+```{r}
+formulas <- list(
+  mpg ~ disp,
+  mpg ~ I(1 / disp),
+  mpg ~ disp + wt,
+  mpg ~ I(1 / disp) + wt
+)
+
+models <- map(formulas, lm, data = mtcars)
+```
+
+7. 
+
+```{r}
+bootstrap <- function(df) {
+  df[sample(nrow(df), replace = TRUE), , drop = FALSE]
+}
+
+bootstraps <- map(1:10, ~ bootstrap(mtcars))
+
+bootstraps %>% 
+  map(~ lm(mpg ~ disp, data = .x)) %>% 
+  map(summary) %>% 
+  map_dbl("r.squared")
+```
+
+
+## 9.3 Purrr style
+
+Example problem: fit model to each subgroup and extract coefficient for model. 
+
+Split by # of cylinders:
+
+```{r}
+by_cyl <- split(mtcars, mtcars$cyl)
+```
+
+List of 3 dfs >> 4, 6, 8 cylinders
+
+Extract slope from each model:
+
+```{r}
+by_cyl %>% 
+  map(~ lm(mpg ~ wt, data = .x)) %>% 
+  map(coef) %>% 
+  map_dbl(2)
+```
+
+
+Base R: 
+
+```{r}
+models <- lapply(by_cyl, function(data) lm(mpg ~ wt, data = data))
+
+vapply(models, function(x) coef(x)[[2]], double(1))
+
+## for loop:
+intercepts <- double(length(by_cyl))
+for (i in seq_along(by_cyl)) {
+  model <- lm(mpg ~ wt, data = by_cyl[[i]])
+  intercepts[[i]] <- coef(model)[[2]]
+}
+
+intercepts
+```
+
+## 9.4 Map variants
+
+### 9.4.1: `modify()`: same type of output as input
+
+Ex. double every column in a df.
+
+`map()` returns list >>> use `modify()` to keep output as df.
+
+```{r}
+df <- data.frame(x = 1:3, y = 6:4)
+modify(df, ~ .x * 2)
+```
+
+
+### 9.4.2: Two inputs 
+
+```{r}
+xs <- map(1:8, ~ runif(10))
+xs[[1]][[1]] <- NA
+ws <- map(1:8, ~ rpois(10, 5) + 1)
+```
+
+`map()` not pass additional arguments as anything after `.f` are not transformed. Need variant that vectorizes over two arguments >>> `.x` and `.y`
+
+```{r}
+map2_dbl(xs, ws, weighted.mean, na.rm = TRUE)
+```
+
+arguemtns go before function `.f`, all additional arguments go after `.f`. 
+
+
+
+
+
+### 9.4.3: No outputs
+
+Most functions called for value returned. Some functions only called for SIDE-EFFECTS so not need returned results. Ex. `cat()`, `write.csv()`, `ggsave()`. 
+
+```{r}
+welcome <- function(x) {
+  cat("Welcome ", x, "!\n", sep = "")
+}
+
+names <- c("Hadley", "Jenny")
+
+map(names, welcome)
+
+walk(names, welcome)
+```
+
+`walk2()`: useful for saving to disk. >>> object and path name
+
+```{r}
+temp <- tempfile() 
+di.create(temp)
+
+cyls <- split(mtcars, mtcars$cyl)
+paths <- file.path(temp, paste0("cyl-", names(cyls), ".csv"))
+walk2(cyls, paths, write.csv)
+dir(temp)
+```
+
+Base R: wrap result of `lapply()` in `invisible()` or save in unused variable.
+
+
+### 9.4.4: Iterating over values and indices
+
+`for` loop:
+- loop over elements: `for (x in xs)` >>> `map()`
+- loop over the numeric indices: `for (i in seq_along(xs))` >>> `imap()`
+- loop over the names: `for (nm in names(xs))` >>> `imap()`
+
+`imap(x, f)` == `map2(x, names(x), f)` if x has names OR `map2(x, seq_along(x), f)`.
+
+```{r}
+imap_chr(iris, ~ paste0("The first value of ", .y, " is ", .x[[1]]))
+```
+
+IF vector is unnamed, 2nd argument == index.
+
+```{r}
+x <- map(1:6, ~ sample(1000, 10))
+imap_chr(x, ~ paste0("The highest value of ", .y, " is ", max(.x)))
+```
+
+### 9.4.5 Any number of inputs
+
+
+`pmap()`: supply with single list of any number of arguments. 
+
+- `pmap(list(x, y), f)` == `map2(x, y, f)`
+
+Allow more control over argument matching as can name the components of the list.
+
+```{r}
+trims <- c(0, 0.1, 0.2, 0.5)
+x <- rcauchy(1000)
+
+pmap_dbl(list(trim = trims), mean, x = x)
+```
+
+- Easy to call `pmap()` with data frame >>> `tibble::tribble()`
+
+```{r}
+params <- tibble::tribble(
+  ~ n, ~ min, ~ max,
+  1L,      0,     1,
+  2L,     10,   100,
+  3L,    100,  1000
+)
+
+pmap(params, runif)
+```
+
+Base R: 
+
+use `Map()` and `mapply()`
 
 
 
