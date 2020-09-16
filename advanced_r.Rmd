@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Packages
 
 ```{r}
-pacman::p_load(lobstr, rlang, dplyr, magrittr, purrr)
+pacman::p_load(lobstr, rlang, dplyr, magrittr, purrr, ggplot2, scales)
 ```
 
 
@@ -4404,6 +4404,718 @@ pmap(params, runif)
 Base R: 
 
 use `Map()` and `mapply()`
+
+
+### exercise 
+
+1. 
+
+
+```{r}
+mtcars
+modify(mtcars, 2)
+```
+
+Extracts the 'x' index by position but keeps the output the same as the input. In this case it grabs the data from the 2nd row but keeps it in the same df format which means that the 2nd row data is recycled to all the other rows.
+
+
+2. 
+
+```{r}
+temp <- tempfile()
+dir.create(temp)
+cyls <- split(mtcars, mtcars$cyl)
+paths <- file.path(temp, paste0("cyl-", names(cyls), ".csv"))
+walk2(cyls, paths, write.csv)
+
+
+imap(cyls, write.csv)
+```
+
+Shows output returns
+
+
+
+# 3. 
+
+```{r}
+mtcars
+trans <- list(
+  disp = function(x) x * 0.0163871,
+  am = function(x) factor(x, labels = c("auto", "manual"))
+)
+
+nm <- names(trans)
+mtcars[nm] <- map2(trans, mtcars[nm], function(f, var) f(var))
+```
+
+apply each of the functions in `trans` to the columns `nm` from mtcars 
+
+4.
+
+map() and write.csv() returns NULL of length input vector while walk2() returns invisibly
+
+
+
+
+## 9.5 reduce
+
+`reduce()`: takes vector lenght == n and produces vector of length == 1 by calling a function with a pair of values at a time.
+
+Generalize function that works with two inputs >>> work with any # of inputs.
+
+Ex. for list of numeric vectors, find values intersect in every element.
+
+
+```{r}
+l <- map(1:4, ~ sample(1:10, 15, replace = TRUE))
+str(l)
+
+## no need to repeatedly call `intersect()`
+reduce(l, intersect)
+reduce(l, union)
+```
+
+Can pass additional arguments. 
+
+```{r}
+simple_reduce <- function(x, f) {
+  out <- x[[1]]
+  for (i in seq(2, length(x))) {
+    out <- f(out, x[[i]])
+  }
+  out
+}
+```
+
+
+Base R: `Reduce()` >>> no supplying of additional arguments
+
+
+### 9.5.2: Accumulate
+
+`accumulate()`: returns all intermediate results 
+
+```{r}
+accumulate(l, intersect)
+```
+
+Similar to cumulative sum:
+
+```{r}
+x <- c(4, 3, 10)
+reduce(x, `+`)
+accumulate(x, `+`)
+```
+
+### 9.5.3: Output types
+
+When length == 1 or 0, without additional arguments, `reduce()` simply returns input when x == 1.
+
+```{r}
+reduce(1, `+`)
+```
+
+No way to check validity of inputs.
+
+```{r}
+reduce("a", `+`)
+```
+
+x == 0
+
+```{r}
+reduce(integer(), `+`)
+```
+
+supply `.init` 
+
+```{r}
+reduce(integer(), `+`, .init = 0)
+reduce("a", `+`, .init = 0)
+```
+
+0: identity of real numbers under the operation of addition. 0 + X == X
+
+
+### 9.5.4: Multiple inputs
+
+`reduce2()`: length of 2nd argument varies depending on `.init` supplied. If 4 elements of 'x', then 'f' will be called 3 times but if `init` then 4 times. 
+
+### 9.5.5: Map-reduce
+
+Hadoop
+
+Each map on individual data >>> results sent back to coordinating power which reduces each result into single overall result.
+
+
+## 9.6 Predicate functionals 
+
+Predicate: Returns single TRUE / FALSE >>> `is.character()`, `is.null()`, `all()`, etc. Predicate MATCHES a vector if it returns TRUE.
+
+### 9.6.1: Basics
+
+Predicate functional: applies predicate to EACH element of a vector.
+
+* `some(.x, .p)`: return TRUE if ANY element matches. Terminates at first TRUE.
+* `every(.x, .p)`: returns TRUE if ALL element matches. Terminates at first FALSE.
+
+* `detect(.x, .p)`: returns value of the first match. 
+* `detect_index(.x, .p)`: returns location of the first match.
+
+* `keep(.x, .p)`: keeps ALL matching elements
+* `discard(.x, .p)`: drops ALL matching elements
+
+```{r}
+df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+
+detect(df, is.factor)
+detect_index(df, is.factor)
+
+str(keep(df, is.factor))
+str(discard(df, is.factor))
+```
+
+### 9.6.2: Map variants 
+
+`*_if()` predicate functions
+
+```{r}
+df <- data.frame(
+  num1 = c(0, 10, 20),
+  num2 = c(5, 6, 7),
+  chr1 = c("a", "b", "c"),
+  stringsAsFactors = FALSE
+)
+
+str(map_if(df, is.numeric, mean))
+str(modify_if(df, is.numeric, mean))
+str(map(keep(df, is.numeric), mean))
+```
+
+### exercise
+
+1. 
+
+`is.na()` returns logical vector of the SAME LENGTH as argument 'x'.
+
+`anyNA(recursive = TRUE)` is predicate version 
+
+2. 
+
+use `seq_along()` instead of `seq()`
+
+3. 
+
+
+4. 
+
+```{r}
+arg_max <- function(x, f){
+  y <- map_dbl(x, f)
+  x[y == max(y)]
+}
+
+arg_min <- function(x, f){
+  y <- map_dbl(x, f)
+  x[y == min(y)]
+}
+
+arg_max(x = -10:5, f = function(x) x ^ 2)
+arg_min(x = -10:5, f = function(x) x ^ 2)
+```
+
+5. 
+
+```{r}
+modify_if(mtcars, is.numeric, scales01)
+```
+
+
+
+## 9.7 Base functionals
+
+Base functionals with no equivalent in {purrr}.
+
+### 9.7.1: Matrices and arrays
+
+`base::apply()`: used with 2D and higher vectors >> matrices + arrays. Summarize matrix or array by collapsing each row/column to a single value.
+
+Arguments: 
+* 'X': matrix or array to summarize
+* 'MARGIN': integer vector giving dimensiosn to summarize over. 1 = rows, 2 = cols, etc.  
+* 'FUN': summary function
+* '...': other arguments to 'FUN'
+
+
+```{r}
+a2d <- matrix(1:20, nrow = 5)
+a2d
+apply(a2d, 1, mean) # row
+apply(a2d, 2, mean) # column
+```
+
+Specify multiple dimensions in 'MARGIN' 
+
+```{r}
+a3d <- array(1:24, c(2, 3, 4))
+apply(a3d, 1, mean)
+apply(a3d, c(1, 2), mean)
+```
+
+`apply()` caveats:
+* no control over output type >>> automatically simplified to list/matrix/vector. 
+* Not idempotent >>> if summary function is identity operator >> output NOT always same as input
+
+```{r}
+a1 <- apply(a2d, 1, identity)
+identical(a2d, a1)
+
+a2 <- apply(a2d, 2, identity)
+identical(a2d, a2)
+```
+
+NEVER use `apply()` with a data frame >>> coerce to matrix == undesireable results if any NOT numeric vector. 
+
+
+### 9.7.2: Mathematical concerns
+
+`integrate()`: finds area under curve defined by `f()`
+`uniroot()`: finds where `f()` hits zero
+`optimise()`: finds location of lowest/highest value of `f()`
+
+### exercise 
+
+1. 
+
+`apply()` applies function over the margins of an array >>> 2D: margins are rows & cols.
+
+```{r}
+arr2 <- array(1:12, dim = c(3, 4))
+rownames(arr2) <- paste0("row", 1:3)
+colnames(arr2) <- paste0("col", 1:4)
+arr2
+```
+
+Transposed over rows
+
+```{r}
+apply(arr2, 1, function(x) x[1:2])
+apply(arr2, 2, function(x) x[1:2])
+```
+
+The output of apply() is organised first by the margins being operated over, then the results of the function. This can become quite confusing for higher dimensional arrays.
+
+
+2. 
+
+
+eapply() is a variant of lapply(), which iterates over the (named) elements of an environment. In purrr there is no equivalent for eapply() as purrr mainly provides functions that operate on vectors and functions, but not on environments.
+
+rapply() applies a function to all elements of a list recursively. This function makes it possible to limit the application of the function to specified classes (default classes = ANY). One may also specify how elements of other classes should remain: i.e. as their identity (how = replace) or another value (deflt = NULL). The closest equivalent in purrr is modify_depth(), which allows you to modify elements at a specified depth in a nested list.
+
+
+
+
+
+# 10 Function factories
+
+Function factory: function that makes functions.
+
+```{r}
+power1 <- function(exp) {
+  function(x) {
+    x ^ exp
+  }
+}
+
+square <- power1(2)
+cube <- power1(3)
+
+## manufactured functions
+square(3)
+cube(3)
+```
+
+
+## 10.2 Factory fundamentals
+
+THe enclosing environment of the manufactured function is an execution environment of the function factory.
+
+
+### 10.2.1: Environments
+
+
+```{r}
+square
+
+cube
+```
+
+'x' is from argument. 'exp'? 
+
+Each of `square()` and `cube()` have two different environments for 'exp' with the same parent, the enclosing environment of `power1()` - the global environment.
+
+```{r}
+env_print(square)
+env_print(cube)
+
+fn_env(square)$exp
+fn_env(cube)$exp
+```
+
+Names in enclosing environment are BOUND to different values (square == 2, cube == 3). 
+For `square(10)`: For executing `x & exp` it finds 'x' in execution environment and 'exp' in the enclosing environment (so it finds 2 instead of any other value bound by other functions created by the factory).
+
+### 10.2.3: Forcing evaluation
+
+Bug in `power1()` due to lazy evaluation. 
+
+```{r}
+x <- 2 
+square <- power1(x)
+x <- 3
+
+square(2) # == 8! when it should be 4!
+```
+
+
+'x' is only evaluated lazily when `square()` is run, NOT when `power1()` is run.
+
+Happen when binding changes in between calling factory function and calling the manufactured function. Fix by "forcing" evaluation with `force()`:
+
+```{r}
+power2 <- function(exp) {
+  force(exp)
+  function(x) {
+    x ^ exp
+  }
+}
+
+x <- 2 
+square <- power2(x)
+x <- 3
+
+square(2)
+```
+
+When creating function factory, make sure EVERY argument is evaluated using `force()` if necessary if argument ONLY used by manufactured function.
+
+
+### 10.2.4: Stateful functions 
+
+Maintain state across function invocations, generally unable due to fresh start principle. 
+
+- Enclosing environment of manufactured function is UNIQUE and CONSTANT.
+- R has special assignment operator `<<-` which modifies bindings in the enclosing environment. 
+
+`<-`: always creates binding in the current environment
+
+`<<-`: rebinds an existing name found in the parent environment 
+
+
+```{r}
+new_counter <- function() {
+  i <- 0
+  
+  function() {
+    i <<- i + 1
+    i
+  }
+}
+
+counter_one <- new_counter()
+counter_two <- new_counter()
+
+counter_one()
+counter_one()
+
+counter_two()
+```
+
+When manufactured function is run `i <<- i + 1` will modify 'i' in its enclosing environment. As manufactured functions have independent enclosing environments >>> they have independent counts. If function is managing state of multiple variables, use R6 instead...
+
+
+### 10.2.5: Garbage collection
+
+Manufactured functions hold on to the execution environment >>> so necessary to explicitly unbind any large temporary objects with `rm()`.
+
+```{r}
+f1 <- function(n) {
+  x <- runif(n)
+  m <- mean(x)
+  function() m
+}
+
+g1 <- f1(1e6)
+lobstr::obj_size(g1)
+
+f2 <- function(n) {
+  x <- runif(n)
+  m <- mean(x)
+  rm(x)
+  function() m
+}
+
+g2 <- f2(1e6)
+lobstr::obj_size(g2)
+```
+
+### exercise 
+
+1. `force()`
+
+using this function clearly indicates that you’re forcing evaluation, not that you’ve accidentally typed x.
+
+
+2. 
+
+
+3. 
+
+```{r}
+pick <- function(i) {
+  force(i)
+  
+  function(x) x[[i]]
+}
+
+x <- 1:3
+identical(x[[1]], pick(1)(x))
+
+identical(lapply(mtcars, function(x) x[[5]]),
+          lapply(mtcars, pick(5)))
+```
+
+
+4. 
+
+```{r}
+moment <- function(i){
+  force(i)
+  
+  function(x) sum((x - mean(x)) ^ i) / length(x)
+}
+
+m1 <- moment(1)
+m2 <- moment(2)
+
+x <- runif(100)
+all.equal(m1(x), 0)  # removed stopifnot() for clarity
+#> [1] TRUE
+all.equal(m2(x), var(x) * 99 / 100)
+#> [1] TRUE
+```
+
+
+
+5. no closure?
+
+```{r}
+i <- 0
+new_counter2 <- function() {
+  i <<- i + 1
+  i
+}
+
+new_counter2()
+
+i
+
+new_counter2()
+
+i
+
+i <- 0
+new_counter2()
+```
+
+Counts will be stored in global environments which can then be overwritten or deleted to interfere with other counters being executed. 
+
+6. use <- instead of <<-
+
+Always return same value due to fresh start principle (always start new execution environment within same enclosing environment - containing unchanged value for '_')
+
+
+## 10.3 Graphical factories
+
+### 10.3.1: Labelling 
+
+{scales}: customize labels in {ggplot2}. Formatter functions all return a function. Primary interface is a function factory. 
+
+```{r}
+y <- c(12345, 123466, 123584)
+comma_format()(y)
+
+number_format(scale = 1e-3, suffix = "k")(y)
+```
+
+```{r}
+df <- data.frame(x = 1, y = y)
+core <- ggplot(df, aes(x, y)) +
+  geom_point() + 
+  scale_x_continuous(breaks = 1, labels = NULL) +
+  labs(x = NULL, y = NULL)
+
+core 
+core + scale_y_continuous(labels = comma_format())
+core + scale_y_continuous(labels = number_format(scale = 1e-3, suffix = "k"))
+core + scale_y_continuous(labels = scientific_format())
+```
+
+
+### 10.3.2: Histogram bins
+
+'binwidth' argument can be a function. Function is executed once for EACh group, so can have different bindwidths in different facets. 
+
+```{r}
+sd <- c(1, 5, 15)
+n <- 100
+
+df <- data.frame(x = rnorm(3 * n, sd = sd), sd = rep(sd, n))
+
+ggplot(df, aes(x)) + 
+  geom_histogram(binwidth = 2) + 
+  facet_wrap(~ sd, scales = "free_x") + 
+  labs(x = NULL)
+```
+
+Each facet has same 'n' but different variance. Create with function factory that take input of desired # of bins, and outputs function that takes numeric vector to return binwidth. 
+
+
+```{r}
+binwidth_bins <- function(n) {
+  force(n)
+  
+  function(x) {
+    (max(x) - min(x)) / n
+  }
+}
+
+ggplot(df, aes(x)) + 
+  geom_histogram(binwidth = binwidth_bins(20)) + 
+  facet_wrap(~ sd, scales = "free_x") + 
+  labs(x = NULL)
+```
+
+
+```{r}
+base_bins <- function(type) {
+  fun <- switch(type,
+    Sturges = nclass.Sturges,
+    scott = nclass.scott,
+    FD = nclass.FD,
+    stop("Unknown type", call. = FALSE)
+  )
+  
+  function(x) {
+    (max(x) - min(x)) / fun(x)
+  }
+}
+
+ggplot(df, aes(x)) + 
+  geom_histogram(binwidth = base_bins("FD")) + 
+  facet_wrap(~ sd, scales = "free_x") + 
+  labs(x = NULL)
+```
+
+
+### 10.3.3: `ggsave()`
+
+`ggplot2:::plot_dev()` used by `ggsave()` to go from file extension to graphics device function. Base graphics devices have minor inconsistencies.
+
+- `filename` vs. `file`
+- `width` and `height` pixels in raster graphics but inches in vector graphics
+
+
+
+## 10.4 Statistical factories 
+
+
+
+## 10.5 Function factories and functionals
+
+
+Create specially named power functions by iterating over a list of arguments.
+
+```{r}
+names <- list(
+  square = 2, 
+  cube = 3, 
+  root = 1/2, 
+  cuberoot = 1/3, 
+  reciprocal = -1
+)
+funs <- purrr::map(names, power1)
+
+funs$root(64)
+#> [1] 8
+funs$root
+```
+
+Annoying to have to prefix every function call with `fun$`
+
+```{r}
+with(funs, root(100))
+```
+
+`with(mtcars, mpg[cyl == 8  &  disp > 350])`
+    # is the same as, but nicer than
+`mtcars$mpg[mtcars$cyl == 8  &  mtcars$disp > 350]`
+
+OR `attach()` functions to the search path and `detach()` when done
+
+```{r}
+attach(funs)
+root(100)
+detach(funs)
+```
+
+OR copy functions to global environment with `env_bind()`
+
+```{r}
+rlang::env_bind(global_env(), !!!funs)
+root(100)
+rlang::env_unbind(global_env(), names(funs))
+```
+
+
+### exercise
+
+1.
+
+```{r}
+f <- mean
+z <- 1
+x <- list(f = mean, z = 1)
+
+identical(with(x, f(z)), x$f(x$z))
+#> [1] TRUE
+identical(with(x, f(z)), f(x$z))
+#> [1] TRUE
+identical(with(x, f(z)), x$f(z))
+#> [1] TRUE
+identical(with(x, f(z)), f(z))
+```
+
+
+2. `env_bind()` vs. `attach()`
+
+`attach()` adds 'funs' to the search path. Therefore, the provided functions are found before their respective versions from the base package. Further, they can not get accidentally overwritten by similar named functions in the global environment. One annoying downside of using `attach()` is the possibility to attach the same object multiple times, making it necessary to call `detach()` equally often.
+
+In contrast `rlang::env_bind()` just adds the functions in 'fun' to the global environment. No further side effects are introduced and the functions are overwritten when similarly named functions are defined.
+
+
+
+# 11 Function operators
+
+
+
+
+
+
+
+
 
 
 
