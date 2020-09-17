@@ -5109,20 +5109,391 @@ In contrast `rlang::env_bind()` just adds the functions in 'fun' to the global e
 
 # 11 Function operators
 
+Function operator: function that takes functions as input and returns function as output.
+
+```{r}
+chatty <- function(f) {
+  force(f)
+  
+  function(x, ...) {
+    res <- f(x, ...)
+    cat("Processing ", x, "\n", sep = "")
+    res
+  }
+}
+f <- function(x) x ^ 2
+s <- c(3, 2, 1)
+
+purrr::map_dbl(s, chatty(f))
+```
+
+## 11.2 Existing function operators
+
+### 11.2.1: Capturing errors with `purrr::safely()`
+
+`for` loop: If one iteration fails, can still acceess results up to the failure. 
+
+```{r}
+x <- list(
+  c(0.512, 0.165, 0.717),
+  c(0.064, 0.781, 0.427),
+  c(0.890, 0.785, 0.495),
+  "oops"
+)
+
+out <- rep(NA_real_, length(x))
+for (i in seq_along(x)) {
+  out[[i]] <- sum(x[[i]])
+}
+
+out
+```
+
+Functionals: no output so difficulty assessing where problem is.
+
+```{r}
+map_dbl(x, sum)
+```
+
+Use `purrr::safely()` to transforms function to turn errors into data. 
+
+```{r}
+safe_sum <- safely(sum)
+safe_sum
+
+str(safe_sum(x[[1]]))
+str(safe_sum(x[[4]]))
+```
+
+Returns: 'result' and 'error'. NULL if none.
+
+```{r}
+out <- map(x, safely(sum))
+str(out)
+```
+
+Now have four list each with 'result' and 'error'. Unwieldy so use `purrr::transpose()` to get a list of 'result' and list of 'error'.
+
+```{r}
+out <- transpose(map(x, safely(sum)))
+str(out)
+```
+
+Find results that worked and which failed.
+
+```{r}
+ok <- map_lgl(out$error, is.null)
+ok
+
+x[!ok]
+out$result[ok]
+```
+
+```{r}
+fit_model <- function(df) {
+  glm(y ~ x1 + x2 * x3, data = df)
+}
+
+models <- transpose(map(datasets, safely(fit_model)))
+ok <- map_lgl(models$error, is.null)
+
+# which data failed to converge?
+datasets[!ok]
+
+# which models were successful?
+models[ok]
+```
+
+
+- `possibly()`: return default value when error. 
+- `quietly()`: turns output, messages, warning side-effects into 'output', 'message', 'warning' components of output
+- `auto_browser()`: automatically executes `browser()` inside function if error.
+
+### 11.2.2: Caching computations with `memoise::memoise()`
+
+Function to memorize previous inputs and return cached results. Memoised function can run faster but uses more memory as store previous inputs + outputs.
+
+```{r}
+slow_function <- function(x) {
+  Sys.sleep(1)
+  x * 10 * runif(1)
+}
+system.time(print(slow_function(1)))
+
+system.time(print(slow_function(1)))
+```
+
+Slow for new arguments but for previously seen arguments == very fast as retrieves previous value from that computation.
+
+```{r}
+fast_function <- memoise::memoise(slow_function)
+system.time(print(fast_function(1)))
+
+system.time(print(fast_function(1)))
+```
+
+Fibonacci series: recursive
+
+```{r}
+fib <- function(n) {
+  if (n < 2) return(1)
+  fib(n - 2) + fib(n - 1)
+}
+system.time(fib(23))
+system.time(fib(24))
+```
+
+Memoise: each value is only computed once == faster
+
+```{r}
+fib2 <- memoise::memoise(function(n) {
+  if (n < 2) return(1)
+  fib2(n - 2) + fib2(n - 1)
+})
+system.time(fib2(23))
+system.time(fib2(24))
+```
+
+Dynamic programming: Complex problem can be broken down into many overlapping sub-problems, remembering results of sub-problem can improve performance.
+
+IF function NOT pure (output not only depend on input) then will get misleading results. 
+
+### exercise 
+
+1. 
+
+In R a lot of functions are “vectorised”. Vectorised has two meanings. First, it means (broadly) that a function inputs a vector or vectors, and does something to each element. Secondly, it usually implies that these operations are implemented in a compiled language such as C or Fortran, so that the implementation is very fast.
+
+However, despite what the function’s name implies, Vectorize() is not able to speed up the provided function. It rather changes the input format of the supplied arguments (vectorize.args), so that they can be iterated over.
+
+In essence, Vectorize() is mostly a wrapper for mapply(). Vectorize() provides a convenient and concise notation to iterate over multiple arguments, but has some major drawbacks that mean you generally shouldn’t use it.
+
+2.
+
+possibly() modifies functions to return a specified default value in case of an error (otherwise) and to suppress any error messages (quiet = TRUE).
+
+While reading the source code, we notice that possibly() internally uses purrr::as_mapper(). This enables users to supply not only functions, but also formulas or atomics via the same syntax as known from other functions in the purrr package. Besides this, the new default value (otherwise) gets evaluated once to make it (almost) immutable.
+
+The main functionality of possibly() is provided by base::tryCatch(). In this part the supplied function (.f) gets wrapped and the error and interrupt handling are specified.
 
 
 
 
+3. 
+
+safely() modifies functions to return a list, containing the elements “result” and “error”. It works in a similar fashion as possibly() and besides using as_mapper(), safely() also provides the otherwise and quiet argument. However, in order to provide the result and the error in a consistent way, the tryCatch() part of the implementation returns a list with the same structure in both cases. In the case of successful evaluation “error” equals to NULL and in case of an error “result” equals to otherwise, which is NULL by default.
 
 
+## 11.3 Case study: Creating your own function operators
+
+Imagine you have a named vector of URLs and you’d like to download each one to disk.
+
+```{r}
+urls <- c(
+  "adv-r" = "https://adv-r.hadley.nz", 
+  "r4ds" = "http://r4ds.had.co.nz/"
+  # and many many more
+)
+path <- paste(tempdir(), names(urls), ".html")
+
+walk2(urls, path, download.file, quiet = TRUE)
+```
+
+* Add a small delay between each request to avoid hammering the server.
+* Display a . every few URLs so that we know that the function is still working.
+
+In `for` loop:
+
+```{r}
+for(i in seq_along(urls)) {
+  Sys.sleep(0.1)
+  if (i %% 10 == 0) cat(".")
+  download.file(urls[[i]], paths[[i]])
+}
+```
+
+ALl in one >>> extract out each process to make them reusable.
+
+```{r}
+delay_by <- function(f, amount) {
+  force(f)
+  force(amount)
+  
+  function(...) {
+    Sys.sleep(amount)
+    f(...)
+  }
+}
+system.time(runif(100))
+system.time(delay_by(runif, 0.1)(100))
+
+walk2(urls, path, delay_by(download.file, 0.1), quiet = TRUE)
+```
 
 
+Can not rely on index from loop. Can't pass index as argument as breaks encapsulation (concern of progress function is handled by a higher level wrapper). Progress wrapper manage own internal counter. 
+
+```{r}
+dot_every <- function(f, n) {
+  force(f)
+  force(n)
+  
+  i <- 0
+  function(...) {
+    i <<- i + 1
+    if (i %% n == 0) cat(".")
+    f(...)
+  }
+}
+walk(1:100, runif)
+walk(1:100, dot_every(runif, 10))
+```
+
+Combine:
+
+```{r}
+walk2(
+  urls, path, 
+  dot_every(delay_by(download.file, 0.1), 10), 
+  quiet = TRUE
+)
+
+## use pipe for legibility:
+walk2(
+  urls, path, 
+  download.file %>% dot_every(10) %>% delay_by(0.1), 
+  quiet = TRUE
+)
+```
+
+### exercise
+
+1. 
+
+Both commands will print a dot every 10 downloads and will take the same amout of time to run, so the differences may seem quite subtle.
+
+In the first case, first the dot functionality is added to download.file. Then the delay is added to this already tweaked function. This implies, that the printing of the dot will also be delayed and the first dot will be printed as soon as the download for the 10th url starts.
+
+In the latter case. The delay is added first and the dot-functionality is wrapped around it. This order will print the first dot immediately after the 9th download is finished, the the short delay occurs before the 10th download actually starts.
+
+2.
+
+No. Size of files might be very large to keep in memory.
+
+This implies that it’s probably not beneficial to memoise file.download() in most cases. The only exception is if you are downloading small files many times, and the file at a given URL is guaranteed not to change.
+
+3. 
+
+```{r}
+dir_compare <- function(old, new) {
+  if (setequal(old, new)) {
+    return()
+  }
+  
+  added <- setdiff(new, old)
+  removed <- setdiff(old, new)
+  
+  changes <- c(
+    if (length(added) > 0) paste0(" * '", added, "' was added"),
+    if (length(removed) > 0) paste0(" * '", removed ,
+                                    "' was removed")
+  )
+  message(paste(changes, collapse = "\n"))
+}
+
+dir_compare(c("x", "y"), c("x", "y"))
+#> NULL
+dir_compare(c("x", "y"), c("x", "a"))
+```
+
+Wrap in function operator: 
+
+```{r}
+track_dir <- function(f) {
+  force(f)
+  function(...) {
+    dir_old <- dir()
+    on.exit(dir_compare(dir_old, dir()), add = TRUE)
+    
+    f(...)
+  }
+}
+
+file_create <- track_dir(file.create)
+file_remove <- track_dir(file.remove)
+
+file_create("delete_me")
+file_remove("delete_me")
+```
 
 
+To create a more serious version of track_dir() one might provide optionality to set the full.names and recursive arguments of dir() to TRUE. This would enable to also track the creation/deletion of hidden files and files in folders contained in the working directory.
+
+Other global effects that might be worth tracking include changes regarding:
+
+- the search path and possibly introduced conflicts()
+- options() and par() which modify global settings
+- the path of the working directory
+- environment variables
 
 
+4.
+
+```{r}
+append_line <- function(path, ...) { 
+  cat(..., "\n", sep = "", file = path, append = TRUE)
+}
+
+logger <- function(f, log_path) {
+  force(f)
+  force(log_path)
+  
+  append_line(log_path, "created at: ", as.character(Sys.time()))
+  function(...) {
+    append_line(log_path, "called at: ", as.character(Sys.time()))
+    f(...)
+  }
+}
+
+log_path <- tempfile()
+mean2 <- logger(mean, log_path)
+Sys.sleep(5)
+mean2(1:4) 
+#> [1] 2.5
+Sys.sleep(1)
+mean2(1:4)
+#> [1] 2.5
+
+readLines(log_path)
+```
 
 
+5. 
+
+```{r}
+delay_atleast <- function(amount, f) {
+  force(f)
+  force(amount)
+  
+  # Store the last time the function was run
+  last_time <- NULL
+  
+  # Return modified 'delay-aware' function
+  function(...) {
+    if (!is.null(last_time)) {
+      wait <- (last_time - Sys.time()) + amount
+      if (wait > 0) {
+        Sys.sleep(wait)
+      }
+    }
+    
+    # Update the time after the function has finished
+    on.exit(last_time <<- Sys.time()) 
+    
+    f(...)
+  }
+}
+```
 
 
 
