@@ -4032,7 +4032,7 @@ error_obj
 
 
 
-# Functional Programming
+# II. Functional Programming
 
 First-class functions: functions that behave like any other data structure. Do same things with function as you do with a vector. Assign as variables, store in list, pass as arguments to other functions, create inside functions, return as result of function, etc.
 
@@ -4436,7 +4436,7 @@ Shows output returns
 
 
 
-# 3. 
+3. 
 
 ```{r}
 mtcars
@@ -5499,9 +5499,85 @@ delay_atleast <- function(amount, f) {
 
 
 
+# III. Object-Oriented Programming
+
+## OOP: 
+- polymorphism: developer can consider a function's interface as separate from implementation. So use same function form for different types of input. Similar to encapsulation - usser doesn't need to worry about details of object as they are encapsulated behind a standard interface.
+
+```{r}
+## `summary()` output for numeric and factor variables 
+summary(diamonds$carat)
+summary(diamonds$cut)
+```
+
+## OOP Systems
+
+Class: type of object "what is", organized in hierarchy so if method not exist for one class, parent method is used, child "inherits" behavior. 
+-- Ex. ordered factor inherits from regular factor. GLM inherits from linear model
+Method: implementation for a specific class "what do"
+- Method dispatch: finding correct method given a class
+Fields: defined by class, the data possessed by every instance of that class
+
+### OOP paradigms
+
+- Encapsulated: methods belong to objects/classes, object encapsulates both data (fields) and behavior (methods)
+-- Method call ex.: `object.method(arg1, arg2)`
+
+- Functional: methods belong to generic functions, looks similar to regular function call, internal components are also functions
+-- Method call ex.: `generic(object, arg2, arg3)`
+
+## OOP in R
+
+- S3
+-- informal implementation of functional OOP, rely on common conventions > ironclad guarantees
+
+- S4
+-- formal rewrite of S3. More guarantees + greater encapsulation. S4 implemented in base {methods} package.
+
+- RC
+-- Encapsulated OOP. Special type of S4 objects that are mutable - can be modified in place. 
+
+- R6
+-- Encapsulated OOP. Resolves issues in RC
+
+- R.oo
+-- Formalism on S3, mutable S3 objects.
+
+- proto
+-- Prototype based OOP. Used in {ggplot2}
+
+```{r}
+library(sloop)
+
+otype(1:10)
+otype(mtcars)
+
+mle_obj <- stats4::mle(function(x = 1) (x - 2) ^ 2)
+otype(mle_obj)
+```
 
 
 
+# 12 Base types
+
+
+
+
+
+
+
+# 13 S3
+
+
+
+# 14 R6
+
+
+
+# 15 S4
+
+
+# 16 Trade-offs
 
 
 
