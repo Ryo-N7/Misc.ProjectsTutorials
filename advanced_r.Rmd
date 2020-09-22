@@ -12,7 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 # Packages
 
 ```{r}
-pacman::p_load(lobstr, rlang, dplyr, magrittr, purrr, ggplot2, scales)
+pacman::p_load(lobstr, rlang, dplyr, magrittr, 
+               purrr, ggplot2, scales, sloop)
 ```
 
 
@@ -5560,14 +5561,502 @@ otype(mle_obj)
 
 # 12 Base types
 
+Object: Not ALL objects are object-oriented. 
+-- Base objects vs. OO objects
 
+## 12.2 Base vs. OO objects
 
+Use `is.object()` or `sloop::otype()`
 
+```{r}
+is.object(1:10)
+sloop::otype(1:10)
 
+is.object(mtcars)
+sloop::otype(mtcars )
+```
 
+OO objects have a "class" attribute:
+```{r}
+attr(1:10, "class")
+attr(mtcars, "class")
+```
+
+Use `class()` for S3 and S4 objects but can be misleading if used on base objects. Use `sloop::s3_class()` instead.
+
+```{r}
+x <- matrix(1:4, nrow = 2)
+class(x)
+sloop::s3_class(x)
+```
+
+## 12.3 Base types
+
+ALL objects have a 'base type':
+```{r}
+typeof(1:10)
+typeof(mtcars)
+```
+
+Base types do not form OOP system as functions that behave differently for different base types are using C code >>> uses 'switch' statements. Only R-Core can create new types >>> difficulty due to all work needed to add switch statements to code. 
+
+```{r}
+typeof(NULL)
+
+typeof(1L)
+
+typeof(1i)
+
+typeof(mean)
+
+typeof(`[`)
+
+typeof(sum) 
+
+typeof(globalenv())
+
+mle_obj <- stats4::mle(function(x = 1) (x - 2) ^ 2)
+typeof(mle_obj)
+
+typeof(quote(a))
+
+typeof(quote(a + 1))
+
+typeof(formals(mean))
+```
+
+### 12.3.1: Numeric type
+
+"Numeric" can mean:
+
+1. Alias for "double" type. `as.numeric()` == `as.double()` // `numeric()` == `double()`
+
+2. S3 + S4: numeric is shorthand for 'integer' or 'double' type for picking methods.
+
+```{r}
+sloop::s3_class(1)
+sloop::s3_class(1L)
+```
+
+3. `is.numeric()` tests for objects that BEHAVE like numbers. Factors have type 'integer' but do NOT behavior as numbers.
+
+```{r}
+typeof(factor("x"))
+is.numeric(factor("x"))
+```
 
 # 13 S3
 
+Simplest OO system. Only OO system used by {base} and {stats} + most commonly used on CRAN packages.
+
+Very flexible, few constraints >>> necessity to apply constraints yourself.
+
+## 13.2: Basics
+
+S3 object: base type with at least a 'class' attribute. 
+
+Factor: base type == 'integer' vector, 'class' attribute of "factor", 'levels' attribute stores all possible levels.
+
+```{r}
+f <- factor(c("a", "b", "c"))
+typeof(f)
+attributes(f)
+
+## strip 'class' attribute, lose special behavior
+unclass(f)
+```
+
+S3 object behave differently from underlying base type if passed to a 'generic' function.
+
+`sloop::ftype()`: to find 'generic' functions
+
+```{r}
+ftype(print)
+ftype(str)
+ftype(unclass)
+```
+
+'Generic' function: defines an interface - uses different implementation depending on the 'class' or argument. 
+
+```{r}
+print(f) # print as factor
+
+print(unclass(f)) # strip 'f' of factor class >> behave as integer
+```
+
+`str()` is 'generic': Some S3 classes use it to hide internal details. Ex. 'POSIXlt' class. 
+
+
+'generic': Defines the interface and find right implementation for it. 
+'method': Implementation for a specific class.
+'method dispatch': How 'generic' finds method
+
+```{r}
+s3_dispatch(print(f))
+```
+
+No need to call method directly >> let the 'generic' do it for you. 
+
+Check if method by `sloop::ftype()`.
+
+Can NOT see source codes for most S3 methods as they are not usually exported - only live inside package and not available in global env. 
+
+Check using `sloop::s3_get_method()`:
+
+```{r}
+weighted.mean.Date
+
+s3_get_method(weighted.mean.Date)
+```
+
+### exercise 
+
+1. `t.test()` vs. `t.data.frame()`
+
+```{r}
+ftype(t.test)
+ftype(t.data.frame)
+```
+
+`t.test()`: generic function
+`t.data.frame()`: method that gets called by `t()` to transpose data.frame input.
+
+2. 
+
+```{r}
+install.packages()
+read.csv()
+
+list.files()
+download.file()
+
+data.frame()
+as.character()
+Sys.Date()
+
+all.equal()
+
+do.call()
+on.exit()
+```
+
+
+3. 
+
+`as.data.frame.data.frame()` calls method dispatch for the `as.data.frame()` function for the input data.frame. 
+
+Define names better!!
+
+4. when unclass the mean is taken of the 'some_days' which when losing it's "Date" class now behaves as an double.
+
+5. 
+
+```{r}
+x <- ecdf(rpois(100, 10))
+ftype(x)
+typeof(x)
+s3_class(x)
+attributes(x)
+```
+
+6. 
+
+```{r}
+x <- table(rpois(100, 5))
+typeof(x)
+attributes(x)
+```
+
+## 13.3: Classes
+
+S3: Has no formal definition of class. Only need to set the 'class' attribute.
+
+Creation with `structure()` or post-creation with `class<-()`
+
+```{r}
+x <- structure(list(), class = "my_class")
+
+x <- list()
+class(x) <- "my_class"
+
+class(x)
+inherits(x, "my_class")
+inherits(x, "your_class")
+```
+
+'class' name can be ANY string. Recommend only LETTERS and `_`. Avoid `.` as can be confused with generic/class separator. For packages, use package name in class name to avoid clashes with classes in other packages. 
+
+Can change class of existing objects:
+
+```{r}
+mod <- lm(log(mpg) ~ log(disp), data = mtcars)
+class(mod)
+print(mod)
+
+class(mod) <- "Date"
+print(mod)
+```
+
+Provide 3 basic functions:
+
+- Constructor: low level `new_myclass()` that efficiently creates new objects with the correct structure.
+- Validator: `validate_myclass()` which performs more rigourous checks to ensure object has the correct values.
+- Helper: `myclass()` to provide other users to create objects of your class
+
+### 13.3.1: Constructors
+
+No formal definition of lcass == no built-in way to ensure all objects of a given class have same structure. Enforce consistent structure with a "constructor".
+
+- Name: `new_myclass()`
+- 1 argument for base object, one for each attribute
+- Check type of base object and check typoes of each attribute
+
+`Date`: doulbe with single attribute >>> 'class' == "Date
+
+```{r}
+new_Date <- function(x = doubl()) {
+  stopifnot(is.double(x))
+  structure(x, class = "Date")
+}
+
+new_Date(c(-1, 0, 1))
+```
+
+`difftime`: double but has 'units' attribute
+
+```{r}
+new_difftime <- function(x = double(), units = "secs") {
+  stopifnot(is.double(x))
+  units <- match.arg(units, c("secs", "mins", "hours", "days", "weeks"))
+
+  structure(x,
+    class = "difftime",
+    units = units
+  )
+}
+
+new_difftime(c(1, 10, 3600), "secs")
+new_difftime(52, "weeks")
+```
+
+Avoid checks in constructor.
+
+### 13.3.2: Validators
+
+More complicated classes require more complciated checks for validity. 
+
+Factors: 
+
+```{r}
+new_factor <- function(x = integer(), levels = character()) {
+  stopifnot(is.integer(x))
+  stopifnot(is.character(levels))
+
+  structure(
+    x,
+    levels = levels,
+    class = "factor"
+  )
+}
+
+new_factor(1:5, "a")
+new_factor(0:1, "a")
+```
+
+Separate validation checks from constructor. 
+
+```{r}
+validate_factor <- function(x) {
+  values <- unclass(x)
+  levels <- attr(x, "levels")
+
+  if (!all(!is.na(values) & values > 0)) {
+    stop(
+      "All `x` values must be non-missing and greater than zero",
+      call. = FALSE
+    )
+  }
+
+  if (length(levels) < max(values)) {
+    stop(
+      "There must be at least as many `levels` as possible values in `x`",
+      call. = FALSE
+    )
+  }
+
+  x
+}
+
+validate_factor(new_factor(1:5, "a"))
+validate_factor(new_factor(0:1, "a"))
+```
+
+
+
+### 13.3.3: Helpers
+
+Allow users to construct objects from your class.
+
+- Have same name as class
+- Finish by calling constructur and validator
+- Create carefully crafted error messages for user
+- UI and default values + useful conversions
+
+Helper to coerce input to desired type.
+
+
+```{r}
+new_difftime(1:10) ## error as NOT double
+
+difftime <- function(x = double(), units = "secs") {
+  x <- as.double(x)
+  new_difftime(x, units = units)
+}
+
+difftime(1:10)
+```
+
+
+Natural representation of complex object >>> string.
+
+Convenient to specify factors with character vector. Have `factor()` guess from input character vector that the 'levels' are the unique values. Not always correct but good enough default to start. 
+
+```{r}
+factor <- function(x = character(), levels = unique(x)) {
+  ind <- match(x, levels)
+  validate_factor(new_factor(ind, levels))
+}
+
+factor(c("a", "a", "b"))
+```
+
+
+Some complex objects more naturally specified by multiple simple components >>> date-time via supplying individual components. 
+
+```{r}
+POSIXct <- function(year = integer(), 
+                    month = integer(), 
+                    day = integer(), 
+                    hour = 0L, 
+                    minute = 0L, 
+                    sec = 0, 
+                    tzone = "") {
+  ISOdatetime(year, month, day, hour, minute, sec, tz = tzone)
+}
+
+POSIXct(2020, 1, 1, tzone = "America/New_York")
+```
+
+### exercise 
+
+1. 
+
+Data frames are built on named lists of vectors, where every element is the same length. Their only attribute is “row.names” which must be a character vector the same length as the other elements. We need to provide the number of rows as an input to make it possible to create data frames with 0 columns but multiple rows.
+
+```{r}
+new_data.frame <- function(x, n, row.names = NULL) {
+  stopifnot(is.list(x))
+  
+  # Check all inputs are the same length
+  stopifnot(all(lengths(x) == n))
+  
+  if (is.null(row.names)) {
+    # Use special row names helper
+    row.names <- .set_row_names(n)
+  } else {
+    # Otherwise check that they're a character vector with the 
+    # correct length
+    stopifnot(is.character(row.names), length(row.names) == n)
+  }
+  
+  structure(
+    x,
+    class = "data.frame",
+    row.names = row.names
+  )
+}
+
+# Test
+x <- list(a = 1, b = 2)
+new_data.frame(x, n = 1)
+#>   a b
+#> 1 1 2
+new_data.frame(x, n = 1, row.names = "l1")
+#>    a b
+#> l1 1 2
+
+# Create a data frame with 0 columns and 2 rows    
+new_data.frame(list(), n = 2)
+```
+
+
+
+2.
+
+```{r}
+factor2 <- function(x, levels = unique(x)) {
+  new_levels <- match(x, levels)
+  
+  # Error if levels don't include all values
+  missing <- unique(setdiff(x, levels))
+  if (length(missing) > 0) {
+    stop(
+      "The following values do not occur in the levels of x: ",
+      paste0("'", missing, "'", collapse = ", "), ".", 
+      call. = FALSE
+    )
+  }
+  
+  validate_factor(new_factor(new_levels, levels))
+}
+
+factor2(c("a", "b", "c"), levels = c("a", "b"))
+```
+
+
+3. 
+
+The original implementation allows a more flexible specification of input for x. The input is coerced to character or replaced by character(0) (in case of NULL). It also ensures that the factor levels are unique. This is achieved by setting the levels via base::levels<-, which fails when duplicate values are supplied.
+
+```{r}
+factor()
+```
+
+4. 
+
+
+```{r}
+new_factor <- function(
+  x = integer(),
+  levels = character(),
+  contrast = NULL
+) {
+  stopifnot(is.integer(x))
+  stopifnot(is.character(levels))
+  if (!is.null(constrast)) {
+    # if supplied should be a numeric matrix
+    stopifnot(is.matrix(contrast) && is.numeric(contrast))
+  }
+  
+  structure(
+    x,
+    levels = levels,
+    class = "factor",
+    contrast = contrast
+  )
+}
+```
+
+5. 
+
+```{r}
+as.roman(567)
+```
+
+
+
+
+## 13.4 Generics & Methods
 
 
 # 14 R6
