@@ -6058,6 +6058,371 @@ as.roman(567)
 
 ## 13.4 Generics & Methods
 
+`UseMethod()`: Performs method dispatch which is called by every generic call (except internal >>> C code). 
+
+- 'Name': Name of generic function
+- 'Argument': Used for method dispatch
+
+```{r}
+mean
+```
+
+```{r}
+my_new_generic <- function(x) {
+  UseMethod("my_new_generic")
+}
+```
+
+
+### 13.4.1: Method dispatch
+
+`UseMethod()`: creates a vector of method names and then looks for each potential method in turn. 
+
+```{r}
+x <- Sys.Date()
+sloop::s3_dispatch(print(x))
+```
+
+--> Method being called.
+* method being defined but NOT called.
+
+"default" class: special pseudo-class included to make it possible to define a standard fallback IF class-specific method is NOT available.
+
+
+
+### 13.4.2: Finding methods
+
+`sloop::s3_methods_generic()` & `sloop::s3_methods_class()`: Find ALL methods for a generic or that associated with a certain class.
+
+```{r}
+s3_methods_generic("mean")
+s3_methods_class("ordered")
+```
+
+### 13.4.3: Creating methods
+
+* Only write method if you own the generic or class. 
+* Method must have the same arguments as its generic. Enforced in R CMD check.
+
+IF generic has `...`, method can contain a superset of arguments. Any misspelled arguments will be silently allowed...
+
+### exercise 
+
+1.
+
+```{r}
+tools::nonS3methods("stats")
+```
+
+
+
+2.
+
+
+3.
+
+4.
+
+5.
+
+
+
+## 13.5 Object styles
+
+Record style: use list of equal-length vectors to represent individual components of the object. 
+- Ex. `POSIXlt`: list of 11 date-time components (year, month, day, etc.) 
+- Recrd style classes override `length()` and subsetting methods to conceal the implementation detail
+
+```{r}
+x <- as.POSIXlt(ISOdatetime(2020, 1, 1, 0, 0, 1:3))
+x
+#> [1] "2020-01-01 00:00:01 UTC" "2020-01-01 00:00:02 UTC"
+#> [3] "2020-01-01 00:00:03 UTC"
+
+length(x)
+#> [1] 3
+length(unclass(x))
+#> [1] 9
+
+x[[1]] # the first date time
+#> [1] "2020-01-01 00:00:01 UTC"
+unclass(x)[[1]]
+```
+
+Data frames: use lists of equal-length vectors. 2D objects and components are exposed to user. # of observations == number of rows, NOT length. 
+
+```{r}
+x <- data.frame(x = 1:100, y = 1:100)
+length(x)
+#> [1] 2
+nrow(x)
+```
+
+Scalar: use list to represent a single thing. 
+* Ex. `lm` object is list of length 12 but represents a single model!
+
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+length(mod)
+mod
+```
+
+* Scalar objects can be built on top of functions, calls, environments. 
+* Ex. `stats::ecdf()`, R6, `rlang::quo()`
+
+### exercise
+
+1.
+
+```{r}
+## scalar
+lm()
+
+## vector
+x <- factor(x = c("bo", "ma", "ta"))
+
+## vector
+x <- table(mtcars$cyl)
+length(x)
+length(unclass(x))
+
+# vector 
+x <- as.Date("2020-01-01")
+length(x); length(unclass(x))
+
+## record
+as.POSIXct()
+
+## scalar
+ecdf()
+
+## vector
+ordered()
+
+## depends on input
+I()
+```
+
+
+2. 
+
+```{r}
+# Define constructor
+new_lm <- function(
+  coefficients, residuals, effects, rank, fitted.values, assign,
+  qr, df.residual, xlevels, call, terms, model
+) {
+  
+  stopifnot(
+    is.double(coefficients), is.double(residuals), 
+    is.double(effects), is.integer(rank), is.double(fitted.values),
+    is.integer(assign), is.list(qr), is.integer(df.residual),
+    is.list(xlevels), is.language(call), is.language(terms),
+    is.list(model)
+  )
+  
+  structure(
+    list(
+      coefficients = coefficients,
+      residuals = residuals,
+      effects = effects,
+      rank = rank, 
+      fitted.values = fitted.values,
+      assign = assign,
+      qr = qr,
+      df.residual = df.residual,
+      xlevels = xlevels,
+      call = call,
+      terms = terms, 
+      model = model
+    ),
+    class = "lm"
+  )
+}
+```
+
+
+## 13.6: Inheritance
+
+Inheritance: Share behavior between S3 classes.
+
+- Classes can be a character vector:
+* Ex. `ordered` and `POSIXct` have two components to class
+
+```{r}
+class(ordered("x"))
+class(Sys.time())
+```
+
+- If method not found for class in first element of vector, R looks for method in 2nd, then 3rd, etc.
+
+```{r}
+s3_dispatch(print(ordered("x")))
+s3_dispatch(print(Sys.time()))
+```
+
+- Method can delegate work via `NextMethod()`. `->` sign.
+
+```{r}
+s3_dispatch(ordered("x")[1])
+s3_dispatch(Sys.time()[1])
+```
+
+Subclass: When a class appears before another class. `ordered()`: 'ordered'
+Superclass: When class appears after another class. `ordered()`: 'factor'
+
+
+S3 has no restrictions on relationship between sub/superclass but recommended to enforce principles.
+
+- Base type of subclass should be same as superclass
+- Attributes of subclass should be a superset of attributes of superclass.
+
+
+### 13.6.1: `NextMethod()`
+
+`[`: example with concrete use case, create "secret" class that hides output when printed.
+
+```{r}
+new_secret <- function(x = double()) {
+  stopifnot(is.double(x))
+  structure(x, class = "secret")
+}
+
+print.secret <- function(x, ...) {
+  print(strrep("x", nchar(x)))
+  invisible(x)
+}
+
+x <- new_secret(c(15, 1, 456))
+
+x
+```
+
+Works! But default `[` method does NOT preserve "secret" class.
+
+```{r}
+s3_dispatch(x[1])
+
+x[1]
+```
+
+Need to create `[.secret` method. Need to do without infinite loop (calling `new_secret()` inside the method implementation...). Need to call underlying `[`
+
+* `unclass()` object: Inefficient as would create a copy of 'x'
+
+```{r}
+`[.secret` <- function(x, i) {
+  x <- unclass(x)
+  new_secret(x[i])
+}
+
+x[i]
+```
+
+* `NextMethod()`: Delegating to method that would've been called if `[.secret` didn't exist. Tracks list of potential next methods with a special variable, modifying object that's being dispatched upon will have NO impact on which method gets called next. 
+
+```{r}
+`[.secret` <- function(x, i) {
+  new_secret(NextMethod())
+}
+
+x[1]
+
+s3_dispatch(x[1])
+```
+
+`=>`: `[.secret` called by `NextMethod()` delegates work to underlying `[` internal method show by `->`
+
+
+
+
+### 13.6.2: Allowing subclassing
+
+When create class need to make decision to allow subclasses. Require changes to constructor and methods.
+
+Add `...` and `class` argument to constructor.
+
+```{r}
+new_secret <- function(x, ..., class = character()) {
+  stopifnot(is.double(x))
+  
+  structure(
+    x, 
+    ...,
+    class = c(class, "secret")
+  )
+}
+```
+
+Subclass constructor can call parent class constructor with additional arguments as needed. 
+
+* Create `supersecret` class which also hides # of characters: 
+
+```{r}
+new_supersecret <- function(x) {
+  new_secret(x, class = "supersecret")
+}
+
+print.supersecret <- function(x, ...) {
+  print(rep("xxxxx", length(x)))
+  invisible(x)
+}
+
+x2 <- new_supersecret(c(15, 1, 456))
+x2
+```
+
+For inheritance: think carefully about methods as you can no longer use the constructor. Method will always return same class regardless of input. 
+
+* Revise `[.secret` method... currently always return `secret()` even when given `supersecret`
+
+```{r}
+`[.secret` <- function(x, ...) {
+  new_secret(NextMethod())
+}
+
+x2[1:3]
+```
+
+Need to make sure `[.secret` returns same class as 'x' even using subclass. 
+* Use `vctrs::vec_restore()` generic. 
+** 2 inputs: object with lost subclass info, template object to use for restoration
+
+```{r}
+vec_restore.secret <- function(x, to, ...) new_secret(x)
+vec_restore.supersecret <- function(x, to, ...) new_supersecret(x)
+```
+
+`to` argument for attributes.
+
+
+```{r}
+`[.secret` <- function(x, ...) {
+  vctrs::vec_restore(NextMethod(), x)
+}
+
+x2[1:3]
+```
+
+### exercises
+1.
+
+
+2.
+
+
+3.
+
+
+
+## 13.7: Dispatch details
+
+### 13.7.1: S3 and base types
+
+
+
+
+
 
 # 14 R6
 
