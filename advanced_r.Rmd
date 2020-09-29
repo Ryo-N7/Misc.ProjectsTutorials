@@ -13,7 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 pacman::p_load(lobstr, rlang, dplyr, magrittr, 
-               purrr, ggplot2, scales, sloop)
+               purrr, ggplot2, scales, sloop,
+               R6)
 ```
 
 
@@ -6405,19 +6406,127 @@ x2[1:3]
 ```
 
 ### exercises
+
 1.
 
+```{r}
+`[.Date`
+.Date
+
+oldClass(Sys.Date())
+```
+
+It seems similar to class(), but it returns NULL for base types. Together this means that [.Date effectively calls mean() on the underlying numeric data, then resets the class of the result to the input. This ignores the fact that a subclass might have additional attributes.
 
 2.
+
+
 
 
 3.
 
 
 
+
+
 ## 13.7: Dispatch details
 
 ### 13.7.1: S3 and base types
+
+S3 generic on a base object (no class attribute).
+
+```{r}
+class(matrix(1:5))
+```
+
+Dispatch occurs on `implicit class`
+- string "array"/"matrix" if object has dimensions
+- result of `typeof()` with minor tweaks
+- string "numeric" if object is "integer"/"double"
+
+```{r}
+s3_class(matrix(1:5))
+s3_dispatch(print(matrix(1:5)))
+```
+
+`class()` of object does NOT uniquely determine dispatch:
+
+```{r}
+x1 <- 1:5
+class(x1)
+s3_dispatch(mean(x1))
+
+x2 <- structure(x1, class = "integer")
+class(x2)
+s3_dispatch(mean(x2))
+```
+
+### 13.7.2: Internal generics
+
+Base functions (`[`, `sum()`, `cbind()`) are 'internal generics' as don't use `UseMethod()` but use C functions `DispatchGroup()`/`DispatchOrEval()`
+
+```{r}
+s3_dispatch(Sys.time()[1])
+```
+
+### 13.7.3: Group generics
+
+Use both internal generics AND `NextMethod()`. 
+
+- Math: abs(), sign(), sqrt(), floor(), cos(), sin(), log(), etc.
+
+- Ops: +, -, *, /, ^, %%, %/%, &, |, !, ==, !=, <, <=, >=, and >.
+
+- Summary: all(), any(), sum(), prod(), min(), max(), and range().
+
+- Complex: Arg(), Conj(), Im(), Mod(), Re().
+
+Defining a single group generic for class overrides default behavior of all members of the group. Methods for group generics are looked for only if the methods for the specific generic do not exist:
+
+```{r}
+s3_dispatch(sum(Sys.time()))
+```
+
+`.Generic`: special variable inside group generic function that provides actual generic function called. 
+
+### 13.7.4: Double dispatch
+
+"Ops" group generics: special type of dispatch due to 2-argument arithmetic & boolean operators (`-`, `&`, etc.). Dispatch on BOTH arguments >>> necessary to preserve commutative property of many of the operators. 
+
+```{r}
+date <- as.Date("2017-01-01")
+integer <- 1L
+
+date + integer
+integer + date
+```
+
+Dispatch twice for each input.
+
+- Methods are same, so either one can be used
+- Methods are different, R falls back to internal method + warning
+- One method == internal, so R calls the other method
+
+Use `vctrs::vec_arith()`
+
+
+### exercise 
+
+
+1. 
+
+class() returns "integer" in both cases. But the class of x1 is created implicitly and inherits from the "numeric" class, while the class of x2 is set explicitly and no parent class is assumed.
+
+The output of s3_dispatch() shows us, that various methods are not implemented. Rather an internal dispatch (written in C) is used, which shows [ as an internal generic. We also see, that setting the class explicitly for x2 avoids considering the implicit parent class "numeric" for method dispatch.
+
+2.
+
+
+
+
+
+
+3.
 
 
 
@@ -6426,9 +6535,515 @@ x2[1:3]
 
 # 14 R6
 
+- Encapsulated OOP paradigm: methods belong to objects > generics. `object$method()`
+
+- R6 objects: mutable - modified in place, have references semantics
+
+More similar to OOP in other programming languages. 
+
+## 14.2: Classes and methods
+
+`R6::R6Class()`
+
+- 'classname': improve error messages, use R6 objects with S3 generics. Use UpperCamelCase names.
+- 'public': supply list of methods/functions and fields that make up public interface of the object. Use snake_case. Methods can access the methods and fields of current object via `self$`
+
+```{r}
+Accumulator <- R6::R6Class("Accumulator", list(
+  sum = 0,
+  add = function(x = 1) {
+    self$sum <- self$sum + x
+    invisible(self)
+  }
+))
+
+Accumulator
+```
+
+Construct new object from class with `new()` method. Use `$` to access `new()` as methods belong to objects.
+
+```{r}
+x <- Accumulator$new()
+x$add(4)
+x$sum
+```
+
+### 14.2.1: Method chaining 
+
+`$add()`: called primarily for side-effect of updating `$sum`
+
+```{r}
+Accumulator <- R6::R6Class("Accumulator", list(
+  sum = 0,
+  add = function(x = 1) {
+    self$sum <- self$sum + x
+    invisible(self)
+  }
+))
+```
+
+Side-effect R6 methods should ALWAYS return `self` invisibly. Returns "current" object. Chain together multiple method calls:
+
+```{r}
+x$add(10)$add(10)$sum
+
+## or method-chaining on new line
+x$
+  add(10)$
+  add(10)$
+  sum
+```
+
+### 14.2.2: Important methods
+
+`$initialize()`: overrides default behavior of `$new()`. 
+
+Ex. "Person" class with fields `$name` and `$age`. Ensure `$name` is ALWAYS single string, `$age` ALWAYS single number >>> place checks inside `$initialize()`. 
+
+```{r}
+Person <- R6::R6Class("Person", list(
+  name = NULL,
+  age = NA,
+  initialize = function(name, age = NA) {
+    stopifnot(is.character(name), length(name) == 1)
+    stopifnot(is.numeric(age), length(age) == 1)
+    
+    self$name <- name
+    self$age <- age
+  }
+))
+
+hadley <- Person$new("Hadley", age = "thirty-eight")
+hadley <- Person$new("Hadley", age = 38)
+```
+
+Use separate `$validate()` if have more requirements. Call only when needed.
+
+`$print()`: overrides default printing behavior. Return `invisible(self)`.
+
+```{r}
+Person <- R6::R6Class("Person", list(
+  name = NULL,
+  age = NA,
+  initialize = function(name, age = NA) {
+    self$name <- name
+    self$age <- age
+  },
+  print = function(...) {
+    cat("Person: \n")
+    cat("  Name: ", self$name, "\n", sep = "")
+    cat("  Age: ", self$age, "\n", sep = "")
+    invisible(self)
+  }
+))
+
+had2 <- Person$new("Hadley")
+had2
+```
+
+Methods are bound to individual objects >>> previously created object does NOT get new method.
+
+```{r}
+hadley
+hadley$print
+```
+
+### 14.2.3: Adding methods after creation
+
+Modify fields + methods of an existing class. 
+
+`$set()`: Add new elements to existing class. Supply visibility, name, component.
+
+```{r}
+Accumulator <- R6::R6Class("Accumulator")
+Accumulator$set("public", "sum", 0)
+Accumulator$set("public", "add", function(x = 1) {
+  self$sum <- self$sum + x
+  invisible(self)
+})
+```
+
+Reminder: new methods + fields only available to NEW objects, not added retrospecitively to existing objects before definition.
+
+
+### 14.2.4: Inheritance
+
+`inherit` argument: inherit behavior from an existing class, provide class object
+
+```{r}
+AccumulatorChatty <- R6::R6Class("AccumulatorChatty", 
+                                 inherit = Accumulator, 
+                                 public = list(
+                                   add = function(x = 1) {
+                                     cat("Adding ", x, "\n", sep = "")
+                                     super$add(x = x)
+                                   }
+                                 ))
+
+x2 <- AccumulatorChatty$new()
+x2$add(10)$add(1)$sum
+```
+
+`$add()` overrides superclass implementation. Use `super$` to delegate superclass implementation (similar to `NextMethod()`). Methods not overwritten will use parent class implementation.
+
+### 14.2.5: Introspection
+
+Every R6 object has S3 class that reflects its hierarchy of R6 classes. Easiest way to determine class and its inheritants with `class()`:
+
+```{r}
+class(had2)
+```
+
+S3 hierarchy includes base "R6" classes. Provide common behavior >> `print.R6()` method which class `$print()`.
+
+`names()`: List all methods and fields
+
+```{r}
+names(had2)
+```
+
+### exercise
+
+1.
+
+```{r}
+BankAccount <- R6Class(
+  classname = "BankAccount", 
+  public = list(
+    balance = 0,
+    deposit = function(dep = 0) {
+      self$balance = self$balance + dep
+      invisible(self)
+    },
+    withdraw = function(draw) {
+      self$balance = self$balance - draw
+      invisible(self)
+    }
+  ))
+
+my_account <- BankAccount$new()
+my_account$balance
+
+my_account$
+  deposit(5)$
+  withdraw(15)$
+  balance
+```
+
+```{r}
+BankAccountStrict <- R6Class(
+  classname = "BankAccount",
+  inherit = BankAccount,
+  public = list(
+    withdraw = function(draw = 0) {
+      if (self$balance - draw < 0) {
+        stop("Your `withdraw` must be smaller ",
+             "than your `balance`.", call. = FALSE)
+      }
+      super$withdraw(draw = draw)
+    }
+  ))
+```
+
+
+```{r}
+my_strict_account <- BankAccountStrict$new()
+my_strict_account$balance
+
+my_strict_account$
+  deposit(5)$
+  withdraw(15)
+```
+
+
+
+
+```{r}
+BankAccountCharging <- R6Class(
+  classname = "BankAccount",
+  inherit = BankAccount,
+  public = list(
+    withdraw = function(draw = 0) {
+      if (self$balance - draw < 0) {
+        draw <- draw + 1
+      }
+      super$withdraw(draw = draw)
+    }
+  ))
+```
+
+
+```{r}
+my_charging_account <- BankAccountCharging$new()
+my_charging_account$balance
+
+my_charging_account$
+  deposit(5)$
+  withdraw(15)$
+  withdraw(2)
+```
+
+
+2.
+
+```{r}
+suit <- c("♠", "♥", "♦", "♣")
+value <- c("A", 2:10, "J", "Q", "K")
+cards <- paste0(rep(value, 4), suit)
+```
+
+```{r}
+ShuffledDeck <- R6Class(
+  classname = "ShuffledDeck", 
+  public = list(
+    deck = NULL,
+    initialize = function(deck = cards) {
+      self$deck <- sample(deck)
+    },
+    reshuffle = function() {
+      self$deck <- sample(cards)
+      invisible(self)
+    },
+    n = function() {
+      length(self$deck)
+    },
+    draw = function(n = 1) {
+      if (n > self$n()) {
+        stop("Only ", self$n(), " cards remaining", call. = FALSE)
+      }
+      
+      output <- self$deck[seq_len(n)]
+      self$deck <- self$deck[-seq_len(n)]
+      output
+    }
+  ))
+```
+
+
+```{r}
+my_deck <- ShuffledDeck$new()
+my_deck$draw(52)
+
+my_deck$draw()
+
+my_deck$reshuffle()$draw(5)
+my_deck$deck
+```
+
+3. Why not model bank account // deck of cards with S3?
+
+S3 uses copy-on-modify. Every deposit or card draw would create a new copy of the object. 
+
+4.
+
+```{r}
+Timezone <- R6Class(
+  classname = "Timezone",
+  public = list(
+    get = function() {
+      Sys.timezone()
+    },
+    set = function(value) {
+      stopifnot(value %in% OlsonNames())
+      
+      old <- self$get()
+      Sys.setenv(TZ = value)
+      invisible(old)
+    }
+  )
+)
+```
+
+
+```{r}
+tz <- Timezone$new()
+tz$get() # Asia/Tokyo
+
+old <- tz$set("Antarctica/South_Pole") # stores 'old' as returned invisibly
+tz$get()
+
+## reset
+tz$set(old)
+tz$get()
+```
+
+5.
+
+```{r remedy001}
+
+WorkingDirectory <- R6Class(
+  classname = "WorkingDirectory", 
+  public = list(
+    get = function() {
+      getwd()
+    },
+    set = function(value) {
+      old <- self$get()
+      setwd(value)
+      invisible(old)
+    }
+  ))
+
+asdf <- WorkingDirectory$new()
+asdf$get()
+hjkl <- asdf$set("lobsters")
+asdf$get()
+asdf$set(hjkl)
+asdf$get()
+```
+
+6.
+
+S3 not suitable for modelling state that changes over time. S3 should ~return SAME result when called with the same inputs.
+
+7.
+
+R6 objects are built on top of environments. 'class' attribute containing name, super class name, "R6" element.
+
+
+## 14.3: Controlling access
+
+
+- `private`: create fields + methods only available from within class.
+- `active`: allow usage of accessor functions to define dynamic/active fields
+
+### 14.3.1: Privacy
+
+- 'private': argument similar to 'public' >>> input named list of methods (functions) and fields
+- fields + methods defined in `private` accessed in methods via `private$` instead of `self$`. These can NOT be accessed outside of the class.
+
+Ex. `$age` and `$name` as private fields within 'Person' class.
+
+```{r}
+Person <- R6Class("Person",
+                  public = list(initialize = function(name, age = NA) {
+                    private$name <- name
+                    private$age
+                  },
+                  print = function(...) {
+                    cat("Person: \n")
+                    cat(" Name: ", private$name, "\n", sep = "")
+                    cat(" Age: ", private$age, "\n", sep = "")
+                  }
+                  ),
+                  private = list(
+                    age = NA,
+                    name = NULL
+                  )
+)
+
+had3 <- Person$new("Hadley")
+had3
+had3$name
+```
+
+Distinction `public` vs. `private` important as define what you allow others to access. Private methods less important in R vs. other languages due to simpler object hierarchies in R.
+
+
+
+### 14.3.2: Active fields 
+
+'Active': define components that look like fields from outside but are defined with functions (~methods). 
+'Active bindings': Each active binding is a function that takes a single argument `value`. If argument is `missing()`, then being retrieved or modified.
+
+Ex. Make active field 'random' that returns a different value every time you access it.
+
+```{r}
+Rando <- R6Class("Rando", active = list(
+  random = function(value) {
+    if (missing(value)) {
+      runif(1)
+    } else {
+      stop("Can't set `$random`", call. = FALSE)
+    }
+  }
+))
+
+x <- Rando$new()
+
+x$random
+x$random
+x$random
+```
+
+'Active' fields useful with 'Private' fields as can implement components that look like fields from the outside but provide additional checks. 
+
+Ex. Make read-only 'age' field, ensure 'name' is a length 1 char vector.
+
+```{r}
+Person <- R6Class("Person", 
+  private = list(
+    .age = NA,
+    .name = NULL),
+  active = list(
+    age = function(value) {
+      if (missing(value)) {
+        private$.age
+      } else {
+        stop("`$age` is read-only", call. = FALSE)
+      }
+    },
+    name = function(value) {
+      if (missing(value)) {
+        private$.name
+      } else {
+        stopifnot(is.character(value), length(value) == 1)
+        private$.name <- value
+        self
+      }
+    }
+  ),
+  public = list(
+    initialize = function(name, age = NA) {
+      private$.name <- name
+      private$.age <- age
+    }
+  ))
+
+had4 <- Person$new("Hadley", age = 24)
+had4$name
+had4$name <- 10
+had4$age
+had4$age <- 20
+```
+
+
+### exercise 
+
+1.
+
+
+2.
+
+3.
+
+4.
+
+
+
+
+
+
+
+
+
+
+
 
 
 # 15 S4
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # 16 Trade-offs
