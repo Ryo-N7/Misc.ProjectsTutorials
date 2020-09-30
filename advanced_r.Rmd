@@ -7012,22 +7012,334 @@ had4$age <- 20
 
 1.
 
+```{r}
+BankAccountStrict2 <- R6Class(
+  classname = "BankAccountStrict2",
+  public = list(
+    deposit = function(dep = 0) {
+      private$balance <- private$balance + dep
+      invisible(self)
+    },
+    withdraw = function(draw = 0) {
+      if (private$balance - draw < 0) {
+        stop(
+          "Your 'withdraw' must be smaller ",
+          "than your 'balance'.",
+          .call = FALSE
+        )
+      }
+      private$balance <- private$balance - draw
+      invisible(self)
+    }
+  ),
+  private = list(
+    balance = 0
+  )
+)
+
+my_account_strict_2 <- BankAccountStrict2$new()
+
+my_account_strict_2$deposit(5)
+my_account_strict_2$withdraw(10)
+```
+
+
 
 2.
 
+```{r}
+Password <- R6Class(
+  classname = "Password",
+  public = list(
+    print = function(...) {
+      cat("<Password>: ******\n")
+      invisible(self)
+    },
+    set = function(value) {
+      private$password <- value
+    },
+    check = function(password) {
+      identical(password, private$password)
+    }
+  ),
+  private = list(
+    password = NULL
+  )
+)
+
+my_pw <- Password$new()
+my_pw$set("snuffkin")
+my_pw$password
+my_pw
+```
+
+
+
 3.
+
+```{r}
+Rando <- R6Class(
+  classname = "Rando",
+  private = list(
+    last_random = NULL
+  ),
+  active = list(
+    random = function(value) {
+      if (missing(value)) {
+        private$last_random <- runif(1)
+        private$last_random
+      } else {
+        stop("Can't set '$random'", call. = FALSE)
+      }
+    },
+    previous = function(value) {
+      if (missing(value)) {
+        private$last_random
+      }
+    }
+  )
+)
+
+x <- Rando$new()
+x$random
+x$random
+x$previous
+x$random(5)
+
+y <- Rando$random(5)
+```
 
 4.
 
+```{r}
+A <- R6Class(
+  classname = "A",
+  private = list(
+    field = "foo",
+    method = function() {
+      "bar"
+    }
+  )
+)
+
+B <- R6Class(
+  classname = "B",
+  inherit = A,
+  public = list(
+    test = function() {
+      cat("Field: ", super$field, "\n", sep = "")
+      cat("Method: ", super$method(), "\n", sep = "")
+    }
+  )
+)
+
+B$
+  new()$
+  test()
+```
+
+## 14.4: Reference semantics
+
+Reference semantics: objects are NOT copied when modified
+
+```{r}
+y1 <- Accumulator$new()
+y2 <- y1
+
+y1$add(10)
+c(y1 = y1$sum, y2 = y2$sum)
+```
+
+Use `$clone()` to explicitly copy object:
+
+```{r}
+y1 <- Accumulator$new()
+y2 <- y1$clone()
+
+y1$add(10)
+c(y1 = y1$sum, y2 = y2$sum)
+```
+
+For recursive clone nested R6 objects use: `$clone(deep = TRUE)`.
+
+- Harder to reason about code with R6 objects as you need context.
+- Write a `$finalize()` to complement `$initialize()` to think about when R6 objects are deleted.
+- If field is R6 object, it must be created inside `$initialize()`, not `R6Class()`
+
+### 14.4.1: Reasoning
+
+```{r}
+x <- list(a = 1)
+y <- list(b = 2)
+
+z <- f(x, y)
+```
+
+For MOST functions `f(x, y)` ONLY modified `z`.
+
+```{r}
+x <- List$new(a = 1)
+y <- List$new(b = 2)
+
+z <- f(x, y)
+```
+
+Now if `f()` calls methods of `x` or `y`, it can modify them along WITH `z`. 
+
+Write functions that either return a value OR modify R6 inputs >> NOT BOTH.
 
 
+### 14.4.2: Finalizer
+
+"Finalized": when object is deleted. For most objects with copy-on-modify semantics there are many transient versions of an object.
 
 
+Ex. 2 factor objects: 2nd created when levels modified. First object destroyed by GC.
+
+```{r}
+x <- factor(c("a", "b", "c"))
+x
+levels(x) <- c("c", "b", "a")
+x
+```
+
+R6 objects are only deleted ONCE. Finalizers ~ `on.exit()`, cleaning up any resources created by initializer. 
+
+Ex. Wraps up temporary file, automatically deletes when class is finalized.
+
+```{r}
+TemporaryFile <- R6Class(
+  "TemporaryFile",
+  list(
+    path = NULL,
+    initialize = function() {
+      self$path <- tempfile()
+    },
+    finalize = function() {
+      message("Cleaning up ", self$path)
+      unlink(self$path)
+    }
+  ))
+```
 
 
+Finalizer method run when object is deleted or when R exits.
+
+Only use finalizer to clean up private resources allocated by initializer to avoid finalizer being called anywhere in R code.
+
+```{r}
+tf <- TemporaryFile$new()
+
+rm(tf)
+```
+
+### 14.4.3: R6 fields
+
+If use R6 class as default value of field, it will be shared across ALL instances of the object.
+
+Ex. Create temp DB for every `TemporaryDatabase$new()` but current code always uses the same path. 
+
+```{r}
+TempDB <- R6Class(
+  "TempDB",
+  list(
+    con = NULL, 
+    file = TemporaryFile$new(),
+    initialize = function() {
+      self$con <- DBI::dbConnect(RSQLite::SQLite(), path = file$path)
+    },
+    finalize = function() {
+      DBI::dbDisconnect(self$con)
+    }
+  )
+)
+
+db_a <- TempDB$new()
+db_b <- TempDB$new()
+
+db_a$file$path == db_b$file$path
+```
+
+"Mutable default argument" problem in Python.
+
+`TemporaryFile$new()` called ONLY once when `TempDB` class is defined. 
+
+Solution: Necessary to call `TemporaryFile$new()` every time `TempDB$new()` is called. So needs to be put inside `$initialize()`.
+
+```{r}
+TempDB <- R6Class(
+  classname = "TempDB",
+  list(
+    con = NULL,
+    file = NULL,
+    initialize = function() {
+      self$file <- TemporaryFile$new()
+      self$con <- DBI::dbConnect(RSQLite::SQLite(), path = file$path)
+    },
+    finalize = function() {
+      DBI::dbDisconnect(self$con)
+    }
+  )
+)
+
+db_a <- TempDB$new()
+db_b <- TempDB$new()
+
+db_a$file$path == db_b$file$path
+```
+
+### exercise 
+
+1. 
+
+```{r}
+FileWriter <- R6Class(
+  classname = "FileWriter",
+  public = list(
+    con = NULL,
+    initialize = function(filename) {
+      self$con <- file(filename, open = "a")
+    },
+    finalize = function() {
+      close(self$con)
+    },
+    append_line = function(x) {
+      cat(x, "\n", sep = "", file = self$con)
+    }
+  )
+)
+
+tmp_file <- tempfile()
+my_fw <- FileWriter$new(tmp_file)
+
+readLines(tmp_file)
+
+my_fw$append_line("blah")
+my_fw$append_line("meep meep")
+readLines(tmp_file)
+```
+
+## 14.5: Why R6
 
 
+R6 over RC ('reference classes'):
 
+- R6 is simpler. Both built on top of environments but R6 uses S3 and RC uses S4. To fully understand RC need to also know more complicated S4.
+
+- R6 has documentation: https://r6.r-lib.org
+
+- R6 has simpler mechanism for cross-package subclassing.
+
+- RC mingles variables and fields in the same stack of environments so you need to get and set fields like regular values. R6 places fields in a separate environment so you can get and set fields with a prefix. More explicit.
+
+-- RC: `field`, `field <<- value`
+-- R6: `self$field`, `self$field <- value`
+
+- Speed: R6 > RC. 
+
+- RC is tied to R. Any bugs fixed can only come from new versions of R. Difficult for packages that need to work across different versions.
+
+- R6 and RC are similar so only need slightly additional knowledge for RC if necessary.
 
 
 
