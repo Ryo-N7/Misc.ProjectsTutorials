@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 pacman::p_load(lobstr, rlang, dplyr, magrittr, 
                purrr, ggplot2, scales, sloop,
-               R6)
+               R6, methods)
 ```
 
 
@@ -7345,6 +7345,288 @@ R6 over RC ('reference classes'):
 
 # 15 S4
 
+Formal approach to OOP, similar to S3 but stricter and more specialized implementation. 
+
+- Slot: Named component of object accessed >>> `@` operator. 
+
+{methods}: part of R but not from batch. Good to specify that you're using S4. 
+
+## 15.2: Basics
+
+`setClass()`: define class name and slots, names and class of 'class' data.
+
+```{r}
+setClass("Person",
+         slots = c(
+           name = "character",
+           age = "numeric"
+         ))
+```
+
+Once class is defined, create new objects via `new()` with name of class and value for each slot.
+
+See class with `is()`. Access slots with `@` and `slot()`.
+
+```{r}
+john <- new("Person", name = "John Smith", age = NA_real_)
+
+is(john)
+
+john@name
+slot(john, "age")
+```
+
+Only use `@` in own methods. For other people's classes, find 'accessor' functions. 
+
+Accessors: S4 generics that allow multiple classes to share same external interface.
+
+```{r}
+setGeneric("age", function(x) standardGeneric("age"))
+setGeneric("age<-", function(x, value) standardGeneric("age<-"))
+
+setMethod("age", "Person", function(x) x@age)
+setMethod("age<-", "Person", function(x, value) {
+  x@age <- value
+  x
+})
+
+age(john) <- 50
+age(john)
+```
+
+
+If using S4 class defined in package. `class?___` for help. 
+
+Identify S4 objects and generics:
+
+```{r}
+sloop::otype(john)
+sloop::ftype(age)
+```
+
+### exercise
+
+1.
+
+```{r}
+example_12345 <- lubridate::period(c(1, 2, 3, 4, 5), 
+                                   c("second", "minute", "hour", "day", "week"))
+example_12345
+str(example_12345)
+```
+
+2.
+
+`?method()`
+`?genericName`
+`methods?genericName`
+`ClassName?methodName`
+
+## 15.3: Classes
+
+Define S4 class, use `setClass()`:
+
+- class `name`: use UpperCamelCase
+- Named character vector `slots`: Describe name and classes. 
+
+Ex. Person >>> `c(name = "character", age = "numeric")`
+
+- `prototype`: list of default values for each slot. Optional but should always provide.
+
+```{r}
+setClass("Person",
+         slots = c(
+           name = "character",
+           age = "numeric"
+         ),
+         prototype = list(
+           name = NA_character_,
+           age = NA_real_
+         )
+)
+
+me <- new("Person", name = "Hadley")
+str(me)
+```
+
+### 15.3.1: Inheritance
+
+`contains`: Specifies class of inheritance for slots and behaviors. 
+
+```{r}
+setClass("Employee",
+         contains = "Person",
+         slots = c(
+           boss = "Person"
+         ),
+         prototype = list(
+           boss = new("Person")
+         ))
+
+str(new("Employee"))
+```
+
+### 15.3.2: Introspection
+
+`is()`: determine what class an object inherits from
+
+```{r}
+is(new("Person"))
+is(new("Employee"))
+
+## test if object inherits from specific class
+is(john, "person")
+```
+
+### 15.3.3: Redefinition
+
+Unlike other languages, class definition and object construction happen at run time.
+
+When use `setClass()` >> register class definition in hidden global variable. Can create invalid ojects if redefine class after already instantiated object:
+
+```{r}
+setClass("A", slots = c(x = "numeric"))
+a <- new("A", x = 10)
+
+setClass("A", slots = c(a_different_slot = "numeric"))
+a
+```
+
+### 15.3.4: Helper
+
+`new()`: low-level constructor for developer. User-facing classes should have user-friendly helper. 
+
+- Have same name as class
+- Have thoughtfully crafted UI with carefully chosen defauls, conventions
+- Create error messages for end-user
+- Finish by callling `methods::new()`
+
+
+`age` == optional but `name` == required
+
+```{r}
+Person <- function(name, age = NA) {
+  age <- as.double(age)
+  new("Person", name = name, age = age)
+}
+
+Person("Hadley")
+```
+
+### 15.3.5: Validator
+
+Constructor automatically checks for correct classes:
+
+```{r}
+Person(mtcars)
+```
+
+`Person` class is vector class, so for multiple people. `@name` and `@age` can be diffferent length.
+
+```{r}
+Person("hadley", age = c( 30, 38))
+```
+
+Enforce additional constraints >>> write validator with `setValidity()`. Takes class and function == `TRUE` IF input is valid. 
+
+```{r}
+setValidity("Person", function(object) {
+  if (length(object@name) != length(object@age)) {
+    "@name and @age must be same length"
+  } else {
+    TRUE
+  }
+})
+
+Person("Hadley", age = c(30, 38))
+```
+
+Validity method is only called automatically by `new()` >>> can still create invalid object by modifying it:
+
+```{r}
+alex <- Person("Alex", age = 30)
+
+alex@age <- 1:10
+alex
+
+validObject(alex)
+```
+
+
+### exercise
+
+1.
+
+
+```{r}
+setClass("Person", 
+         slots = c(
+           name = "character", 
+           age = "numeric",
+           given = "character",
+           family = "character",
+           role = "character",
+           email = "character",
+           comment = "character"
+         ),
+         prototype = list(
+           name = NA_character_,
+           age = NA_real_,
+           given = NA_character_,
+           family = NA_character_,
+           role = NA_character_,
+           email = NA_character_,
+           comment = NA_character_
+         )
+)
+
+# Helper to create instances of the Person class
+Person <- function(name, age = NA, 
+                   given = NA_character_,
+                   family = NA_character_,
+                   role = NA_character_,
+                   email = NA_character_,
+                   comment = NA_character_) {
+  age <- as.double(age)
+  
+  new("Person", name = name, age = age, 
+      given = given, family = family, 
+      role = role, email = email,
+      comment = comment)
+}
+
+# Validator to ensure that each slot is of length one
+setValidity("Person", function(object) {
+  invalids <- c()
+  if (length(object@name)    != 1 |
+      length(object@age)     != 1 |
+      length(object@given)   != 1 |
+      length(object@family)  != 1 |
+      length(object@email)   != 1 |
+      length(object@comment) != 1) {
+    invalids <- paste0("@name, @age, @given, @family, @email, ",
+                       "@comment must be of length 1")
+  } 
+  
+  if (!all(object@role %in% c(NA_character_, 
+                              "aut", "com", "cph", "cre", "ctb",
+                              "ctr", "dtc", "fnd", "rev", "ths", "trl"))) {
+    invalids <- c(invalids, paste(
+      "@role (s) must be one of", 
+      paste (c(NA_character_, 
+               "aut", "com", "cph", "cre", "ctb",
+               "ctr", "dtc", "fnd", "rev", "ths", "trl"),
+             collapse = ", "), ".")
+    )
+  }
+  if (length(invalids)) return(invalids)  
+  TRUE
+})
+```
+
+
+
+2.
 
 
 
@@ -7352,8 +7634,223 @@ R6 over RC ('reference classes'):
 
 
 
+3. 
 
 
+
+## 15.4: Generics and methods
+
+Generic: perform method dispatch >> find specific implementation for combination of classes passed to the generic.
+
+`setGeneric()` + `standardGeneric()`: create new S4 generic. Use lowerCamelCase.
+
+```{r}
+setGeneric("myGeneric", function(x) standardGeneric("myGeneric"))
+```
+
+Do NOT use `{}` as for special case.
+
+### 15.4.1: Signature
+
+`signature`: control arguments used for method dispatch. If NOT supplied, all arguments besides `...` are used. It is occasionally useful to remove arguments from dispatch >>> `verbose = TRUE | quiet = FALSE`.
+
+```{r}
+setGeneric("myGeneric",
+           function(x, ..., verbose = TRUE) standardGeneric("myGeneric"),
+           signature = "x")
+```
+
+### 15.4.2: Methods
+
+`setMethod()`: define S4 methods. 
+
+- name of generic, name of class, method
+
+```{r}
+setMethod("myGeneric", "Person", function(x) {
+  # blah blah
+})
+```
+
+`signature`: specifies the argument classes for which method applies. Can include multiple arguments and avoids having to implement double-dispatch like in S3. 
+
+`methods("generic") | methods(class = "class")`: list all methods belonging to generic or associated with class. 
+
+`selectMethod("generic", "class")`: find implementation of specific method
+
+### 15.4.3: Show method
+
+`show()`: controls how object appears when printed. Find using `args()` of the generic.
+
+```{r}
+args(getGeneric("show"))
+```
+
+```{r}
+setMethod("show", "Person", function(object) {
+  cat(is(object)[[1]], "\n",
+      "  Name: ", object@name, "\n",
+      "  Age: ", object@age, "\n",
+      sep = "")
+})
+
+john
+```
+
+
+### 15.4.4: Accessors
+
+Slots: internal implementation detail. User code should avoid accessing directly. All user-accessible slots should be accompanied by accessors. 
+
+If slot is unique to class can be function:
+
+```{r}
+person_name <- function(x) x@name
+```
+
+Define generic so multiple classes can use same interface
+
+```{r}
+setGeneric("name", function(x) standardGeneric("name"))
+setMethod("name", "Person", function(x) x@name)
+
+name(john)
+```
+
+If slot is write-able >>> provide setter function. Include `validObject()` to prevent users from creating invalid objects.
+
+```{r}
+setGeneric("name<-", function(x, value) standardGeneric("name<-"))
+setMethod("name<-", "Person", function(x, value) {
+  x@name <- value
+  validObject(x)
+  x
+})
+
+name(john) <- "Bojangles Johnson"
+name(john)
+
+name(john) <- letters
+```
+
+### exercise
+
+
+1.
+
+```{r}
+setGeneric("age", function(x) standardGeneric("age"))
+setMethod("age", "Person", function(x) x@age)
+
+setGeneric("age<-", function(x, value) standardGeneric("age<-"))
+setMethod("age<-", "Person", function(x, value) {
+  x@age <- value
+  validObject(x)
+  x
+})
+```
+
+2.
+
+Generic definition: name for generic and then name for incorporating method dispatch via `standardGeneric()`.
+
+3.
+
+`is(object)` returns class of object. Contains subclass >> superclass >> superclass, etc. To return most specific subclass, need to specify first element of the object.
+
+
+4.
+
+
+
+
+
+## 15.5 Method dispatch
+
+S4 dispatch: 
+
+- Multiple inheritance: class can have multiple parents
+- Multiple dispatch: generic can use multiple arguments to pick method
+
+Difficult to understand which method selected for given combination of inputs. Keep things simple unless absolutely necessary. 
+
+### 15.5.1: Single dispatch
+
+To find method that gets called start with most specific class of actual arguments and follow until find method that exists. If NO method found then method dispatch fail == error. Always define methods for terminal modes.
+
+Pseudo-classes: don't actually exist but can define useful behaviors. 
+
+- ANY: which matches with any class.
+- MISSING: If method defined for MISSING, will match whenever argument is missing. 
+
+### 15.5.2: Multiple inheritance
+
+Start from actual class supplied to generic and follow until find defined method. If multiple methods found, pick method closest to supplied class. IF methods are same distance then "ambiguous" method. Warning shown and method for class that comes earlier in alphabet will be picked (bad!). Should always strive to resolve through providing a more precise method! ANY will never contribute to ambiguity as it is always farthest away than method for a real class. 
+
+With multiple inheritances hard to prevent ambiguity AND ensure every terminal method has implementation AND minimize # of defined methods.
+
+### 15.5.3: Multiple dispatch
+
+Each method is specified by multiple classes. Fewer terminal class combinations so at minimum can define a single method and have default behavior for ALL inputs. 
+
+
+### 15.5.4: Multiple dispatch and multiple inheritance
+
+Bigger graph == more confusion.
+
+### exercise
+
+1.
+
+
+2.
+
+
+3.
+
+
+## 15.6: S4 and S3
+
+
+With S4 need to interact with existing S3 classes and generics.
+
+### 15.6.1: Classes
+
+`slots` and `contains` can use S4 classes, S3 classes, implicit class of base type.
+
+To use S3 class >>> register with `setOldClass()`. Call for each S3 class and give 'class' attribute. 
+
+```{r}
+setOldClass("data.frame")
+setOldClass(c("ordered", "factor"))
+setOldClass(c("glm", "lm"))
+
+setClass("factor",
+         contains = "integer",
+         slots = c(
+           levels = "character"
+         ),
+         prototype = structure(
+           integer(),
+           levels = character()
+         ))
+
+setOldClass("factor", S4Class = "factor")
+```
+
+Definitions should be provided by creator of S3 class. Request package maintainer to add call to package.
+
+If S4 object inherits from S3 class or base type >>> special virtual slot `.Data` containing underlying base type or S3 object.
+
+Possible to define S3 methods for S4 generics and vice-versa (if set `setOldClass()`). 
+### 15.6.2: Generics
+
+Convert existing S3 generic to S4 generic. Existing function becomes default method (ANY). 
+
+```{r}
+setGeneric("mean")
+selectMethod("mean", "ANY")
+```
 
 
 
