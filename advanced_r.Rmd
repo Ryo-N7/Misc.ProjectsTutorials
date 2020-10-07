@@ -7857,7 +7857,154 @@ selectMethod("mean", "ANY")
 
 # 16 Trade-offs
 
+## 16.2: S4 vs. S3
+
+S4 is more formal, verbose, strict vs. S3. Well suited for large teams as structure provided by system itself. Needs more upfront design vs. S3. Better investment for large projects where greater resources are available. 
+
+S4: Used in Bioconductor for data structures built in S4. 
+
+S4: Complex systems of interrelated objects, minimalize code duplication through careful implementation of methods. Ex. {Matrix}
+
+S4: Easy to provide a general method that works for all inputs and more specialized methods where inputs allows for a more efficient implementation. Careful planning needed to avoid method dispatch ambiguity but higher performance.
+
+S4: increased complexity vs. S3 and lack single source of documentation. 
 
 
+## 16.3: R6 vs. S3
+
+R6: encapsulated objects > generic functions. Reference semantics (modify-in-place). 
+
+Generic: regular function that lives in global namespace. 
+
+R6 method: belongs to object and lives in local namespace. Invoke via `$` and can method chain.
+
+Reference semantics: methods simultaneously return value AND modify object. 
+
+### 16.3.1: Namespacing
+
+Global namespace: multiple packages can use same verbs for working with different types of objects. Generic functions provide uniform API to perform typical actions with a new objects due to strong name conventions. Works well for data analysis as do same thing to differen types of objects (e.g. statistical models >>> can always use `summary()`, `predict()`, etc.). 
+
+- Disadvantage: More thought required for naming. Avoid multiple generics with same name in different packages or else use `::` a lot. Not a problems with R6 as methods scoped to object. S3 generics must have same core arguments. Necessity use non-specific names `x`, `.data`, etc. Use of `...` to pass additional arguments but misspelled arguments will NOT create error. Creating S3 method is expensive as have to also create generic and think about naming. 
+
+R6 advantages: R6 methods can have more variety + use specific/evocative argument names. Creating R6 method is cheap due to local namespacing. Most encapsulated OO languages encourage create many small methods >> each do one small thing well with evocative name. 
+
+
+### 16.3.2: Threading state
+
+S3 challenges when want to return a value AND modify object. Function should be called for return value OR side effect but may be needed in certain cases. 
+
+Ex. "stack" of objects:
+
+`push()`: add new object to top of stack
+`pop()`: return top most value and then remove 
+
+A stack contains a list of items, pushing an object to stack = append to list.
+
+```{r}
+new_stack <- function(items = list()) {
+  structure(list(items = items), class = "stack")
+}
+
+push <- function(x, y) {
+  x$items <- c(x$items, list(y))
+  x
+}
+```
+
+
+`pop()`: return value (object at top of stack) AND side-effect (remove object at top)
+
+Need to return value AND updated object as can't modify input object in S3. 
+
+
+```{r}
+pop <- function(x) {
+  n <- length(x$items)
+  item <- x$items[[n]]
+  x$items <- x$items[-n]
+  
+  list(item = item, x = x)
+}
+
+s <- new_stack()
+s <- push(s, 10)
+s <- push(s, 20)
+
+out <- pop(s)
+out$item
+
+s <- out$x
+s
+```
+
+Threading state/accumulator programming: No matter how deeply `pop()` is called, you have to thread the modified stack object all the way back to where it lives. 
+
+Functional programming langugages use 'multiple assign'/'destructruing bind' operators to assign multiple values in a single step. 
+
+
+
+R6 implementation of "stack" is much simpler as `$pop()` can modify-in-place AND return only top-most value:
+
+```{r}
+Stack <- R6Class("Stack", list(
+  items = list(),
+  push = function(x) {
+    self$items <- c(self$items, x)
+    invisible(self)
+  },
+  pop = function() {
+    item <- self$items[[self$length()]]
+    self$items <- self$items[-self$length()]
+    item
+  },
+  length = function() {
+    length(self$items)
+  }
+))
+
+s <- Stack$new()
+
+s$
+  push(10)$
+  push(20)$
+  pop()
+
+s$items
+```
+
+### 16.3.3: Method chaining
+
+Commonly used in other programming languages >> Python, JS, etc.
+
+Any R6 method that is primarily called for its side-effects (~modify-in-place) should return `invisible(self)`. Useful auto-complete vs. only creator of class can add new methods (NO multiple dispatch).
+
+
+
+
+
+# IV. Meta-programming
+
+
+
+# 17 Big picture
+
+
+
+
+
+
+
+
+
+
+# 18 Expressions
+
+
+# 19 Quasiquotations
+
+# 20 Evaluation
+
+
+# 21 Translating R code
 
 
