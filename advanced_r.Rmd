@@ -7985,19 +7985,242 @@ Any R6 method that is primarily called for its side-effects (~modify-in-place) s
 # IV. Meta-programming
 
 
+Code: data that can be inspected and modified programatically. 
+
+`library(purrr)` > `library("purrr")`
+
+Non-standard evaluation (NSE): property of the arguments of a function, what IS standard then?
 
 # 17 Big picture
 
+## 17.2 Code is data
+
+`rlang::expr()`: Capture code and compute on as you can with any other type of data. 
+
+```{r}
+expr(mean(x, na.rm = TRUE))
+
+expr(10 + 100 + 1000)
+```
+
+Expression: captured code. Collective term for 4 types (call, symbol, constant, pairlist)
+
+`enexpr()`: capture code passed to a function >> user input. 
+
+```{r}
+capture_it <- function(x) {
+  enexpr(x)
+}
+
+capture_it(a + b + c)
+```
+
+Once expression is captured, can inspect and modify it. Complex expressions behave as lists so use `[[` and `$`.
+
+```{r}
+f <- expr(f(x = 1, y = 2))
+
+f$z <- 3
+f
+
+f[[2]] <- NULL
+f
+```
+
+## 17.3 Code is a tree
+
+Abstract syntax tree (AST): code represented as tree structure. In R can manipulate and inspect tree.
+
+`lobstr::ast()`: Displays underlying tree structure of a function. Function calls form the branches, shown as recetangles. Leaves of tree are symbols and/or constants.
+
+```{r}
+lobstr::ast(f(a, "b"))
+```
+
+Nested function calls create more deeply branching trees:
+
+```{r}
+lobstr::ast(f1(f2(a, b), f3(1, f4(s))))
+```
+
+ALL R expressions can be displayed including prefix forms:
+
+```{r}
+lobstr::ast(1 + 2 * 3)
+```
+
+## 17.4 Code can generate code
+
+`rlang::call2()`: code to create new trees, construct function call from components.
+
+```{r}
+call2("f", 1, 2, 3)
+call2("+", 1, call2("*", 2, 3))
+```
+
+`!!`, unquote operator: build complex code trees by combining simpler code trees with a template. `!!x` inserts code tree stored in 'x' into the expression.
+
+```{r}
+xx <- expr(x + x)
+yy <- expr(y + y)
+
+expr(!!xx / !!yy)
+```
+
+Output preserves operator precedence. Unquoting useful when wrap into a function. 
+
+Use `enexpr()` to capture user expression, then `expr()` and `!!` to create a new expression using a template. 
+
+Ex. generate expression that computes the coefficent of variation:
+
+```{r}
+cv <- function(var) {
+  var <- enexpr(var)
+  expr(sd(!!var) / mean(!!var))
+}
+
+cv(x)
+cv(x + y)
+```
+
+```{r}
+cv(`)`)
+```
 
 
+## 17.5 Evaluation runs code
+
+`evaluate`: execute/run an expression. Evaluating an expression requires an environment, which tells R what symbols in the expression mean. 
+
+`base::eval()`: primary tool for evaluating expressions >>> takes expression and environment as arguments.
+
+```{r}
+eval(expr(x + y), env(x = 1, y = 10))
+
+eval(expr(x + y), env(x = 2, y = 100))
+```
+
+If 'environment' is omitted, it uses current environment:
+
+```{r}
+x <- 10
+y <- 100
+eval(expr(x + y))
+```
+
+Advantages of evaluating code manuallly: tweak environment.
+
+- temporarily override functions to implement a DLS
+- add data mask to refer to variables in a data frame as if they are variables in an environment. 
+
+## 17.6 Customizing evaluation with functions
+
+Names can be bound to functions which can override the behavior of existing functions.
+
+Ex. `*` and `+` overridden to work with strings instead of numeric: 
+
+```{r}
+string_math <- function(x) {
+  e <- env(
+    caller_env(),
+    `+` = function(x, y) paste0(x, y),
+    `*` = function(x, y) strrep(x, y)
+  )
+  
+  eval(enexpr(x), e)
+}
+
+name <- "Hadley"
+string_math("Hello" + name)
+string_math(("x" * 2 + "-y") * 3)
+```
+
+ex. {dplyr} takes code and generates SQL for execution in a DB:
 
 
+```{r}
+con <- DBI::dbConnect(RSQLite::SQLite(), filename = ":memory:")
+mtcars_db <- copy_to(con, mtcars)
+
+mtcars_db %>% 
+  filter(cyl > 2) %>% 
+  select(mpg:hp) %>% 
+  head(10) %>% show_query()
+
+DBI::dbDisconnect(con)
+```
+
+## 17.7 Customizing evaluation with data
 
 
+Rebinding functions is powerful but requires investment. More practical application is modifying evaluation to look for variables ina a data frame instead of environment. 
 
+Ex. `subset()`, `transform()`, `ggplot2::aes()`, `dplyr::mutate()`. 
+
+`tidyeval::eval_tidy()`: expression, environment, data mask as arguments. 
+
+```{r}
+df <- data.frame(x = 1:5, y = sample(5))
+
+eval_tidy(expr(x + y), df)
+```
+
+Data mask: useful fo interactive analysis as can write `x + y` instead of `df$x + df$y` but comes with the cost of ambiguity. 
+
+Wrap with `enexpr()` >>> similar to `base::with()`
+
+```{r}
+with2 <- function(df, expr) {
+  eval_tidy(enexpr(expr), df)
+}
+
+with2(df, x + y)
+```
+
+## 17.8 Quosures
+
+Bug in `with2()`. Evaluation of captured expression where it's being written and not the environment within created function itself. 
+
+```{r}
+with2 <- function(df, expr) {
+  a <- 1000
+  eval_tidy(enexpr(expr), df)
+}
+
+df <- data.frame(x = 1:3)
+a <- 10
+with2(df, x + a)
+```
+
+Needs to evalute `a = 10` rather than `a = 1000` inside the function environment.
+
+`quosure`: bundles an expression with an environment. Use `enquo()` instead of `enexpr()`. 
+
+```{r}
+with2 <- function(df, expr) {
+  a <- 1000
+  eval_tidy(enquo(expr), df)
+}
+
+with2(df, x + a)
+```
+
+If using a data mask, need to ALWAYS use `enquo()` instead of `enexpr()`. 
 
 
 # 18 Expressions
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # 19 Quasiquotations
