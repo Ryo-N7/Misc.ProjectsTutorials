@@ -8942,30 +8942,350 @@ exp1[[1]]
 # 19 Quasiquotations
 
 
+Quotation: capturing an unevaluated expression.
+
+Unquotation: Selectively evaluate parts of a quoted expression.
+
+Quasiquotation: create functions that combine code written by function author and code written by function user.
+
+
+## 19.2 Motivation
+
+Ex. strings
+
+```{r}
+paste("Good", "morning", "Hadley")
+paste("Good", "afternoon", "Alice")
+```
+
+Create a function so we don't have to use quotation marks!
+
+```{r}
+cement <- function(...) {
+  args <- ensyms(...)
+  paste(purrr::map(args, as_string), collapse = " ")
+}
+
+cement(Good, morning, Hadley)
+cement(Good, afternoon, Alice)
+```
+
+If use variables then can not use.
+
+```{r}
+name <- "Hadley"
+time <- "morning"
+
+paste("Good", time, name)
+cement(Good, time, name)
+```
+
+Explicitly unquote input to remove quotation marks. 
+
+`!!`: Use unquote operator.
+
+```{r}
+paste("Good", time, name)
+cement(Good, !!time, !!name)
+```
+## 19.2.1: Vocabulary
+
+Evaluated argument: obeys R's evaluation rules
+Quoted argument: captured by function, processed in custom ways.
+
+Ex. `paste()` evaluates all arguments, `cement()` quotes all arguments.
+
+
+### exercise
+
+1.
+
+```{r}
+library(MASS) # package name quoted
+mtcars2 <- subset(mtcars, cyl == 4) ## cyl quoted, mtcars evaluated
+with(mtcars2, sum(vs))  ##  mtcars2 evaluated, sum(vs) quoted
+sum(mtcars2$am) ## am quoted by `$()`, mtcars$am evaluated
+rm(mtcars2)    ## mtcars2 quoted
+```
+
+
+2.
 
 
 
 
+## 19.3 Quoting
+
+### 19.3.1: Capturing expressions
+
+`expr()`: captures argument as provided
+
+```{r}
+expr(x + y)
+expr( 1 / 2 /3)
+```
+
+Not useful inside a function:
+
+```{r}
+f1 <- function(x) expr(x)
+f1(a + b + c)
+```
+
+`enexpr()`: Captures what caller supplied to function by looking at internal promise object that powers lazy evaluation.
+
+`enexprs()`: For all arguments inside `...`
+
+```{r}
+f2 <- function(x) enexpr(x)
+f2(a + b + c)
+
+f <- function(...) enexprs(...)
+f(x = 1, y = 10 * z)
+```
+
+`exprs()`: list of expressions
+
+```{r}
+exprs(x = x ^ 2, y = y ^ 3, z = z ^ 4)
+```
+
+USER supplied expressions: `enexpr() | enexprs()`
+DEVELOPER supplied expressions: `expr() | exprs()`
+
+### 19.3.2: Capturing symbols
+
+`ensym() | ensyms()`: User to specify variable name > arbitrary expression. Variants of `enexpr() | enexprs()` that check captured expressions for symbol or string. Error if else.
+
+```{r}
+f <- function(...) ensyms(...)
+
+f(x)
+f("x")
+```
+
+
+### 19.3.3: Base R
+
+Base do not support unquoting. 
+
+`quote()` == `expr()`
+
+```{r}
+quote(x + y)
+```
+
+
+`substitute()` == `enexpr()`
+
+```{r}
+f3 <- function(x) substitute(x)
+f3(x + y)
+```
+
+`alist()` == `exprs()`
+
+```{r}
+alist(x = 1, y = x + 2)
+```
+`substitute()` == `enexprs()`
+
+```{r}
+f <- function(...) as.list(substitute(...()))
+f(x = 1, y = 10 * z)
+```
+
+`bquote()`: limited form of quasiquotation
+
+`~`: formula - quoting function that also captures environment.
+
+### 19.3.4: Substitution
+
+`substitute()` used for capturing unevaluated arguments. Can also substitute symbols defined in current environment for expressions. Provide clarity on intent.
+
+```{r}
+f4 <- function(x) substitute(x * 2)
+f4(a + b + c)
+
+substitute(x * y * z, list(x = 10, y = quote(a + b)))
+```
+
+### 19.3.5: Summary 
+
+Quoting:
+- Supplied by DEVELOPER or USER? 
+-- Fixed: supplied in body of function
+-- Varying: supplied via an argument
+
+- Capture single or multiple expressions?
+
+### exercise
+
+1.
+
+2.
+
+
+```{r}
+## return arguments defined WITHIN body of `f1()`
+f1 <- function(x, y) {
+  exprs(x = x, y = y)
+}
+
+f1(a + b, c + d) # x, y
+
+## return arguments supplied to `f2()`
+f2 <- function(x, y) {
+  enexprs(x = x, y = y)
+}
+
+f2(a + b, c + d) # a + b      c + d
+```
 
 
 
 
+3.
+
+
+4.
+
+5.
+
+6.
+
+
+## 19.4 Unquoting
+
+Unquoting: selectively evaluate parts of expression >>> merge ASTs using a template AST. 
+
+Evaluate code inside `expr()` >> `expr(!!x)` == `x`
+
+### 19.4.1: Unquoting 1 argument
+
+`!!`: unquote single argument in a function call. Single expression input, evaluates it, inline result in AST. WOrk with symbols and constants.
+
+```{r}
+x <- expr(-1)
+expr(f(!!x, y))
+
+a <- sym("y")
+b <- 1
+expr(f(!!a, !!b))
+```
+
+IF right side of `!!` is a function call >>> evaluate and insert results.
+
+```{r}
+mean_rm <- function(var) {
+  var <- ensym(var)
+  expr(mean(!!var, na.rm = TRUE))
+}
+
+expr(!!mean_rm(x) + !!mean_rm(y))
+expr(mean_rm(x))
+```
+
+`!!` preservces operator precedence:
+
+```{r}
+x1 <- expr(x + 1)
+x2 <- expr(x + 2)
+
+expr(!!x1 / !!x2)
+```
+
+### 19.4.2: Unquoting a function
+
+Use `!!` to replace functions.
+
+```{r}
+f <- expr(foo)
+expr((!!f)(x, y))
+expr(!!f(x, y)) ## unquotes result of f(x, y) first!
+
+f <- expr(pkg::foo)
+expr((!!f)(x, y))
+
+## use `call2()` instead to avoid parentheses hell
+f <- expr(pkg::foo)
+call2(f, expr(x), expr(y))
+```
+
+### 19.4.3: Unquoting missing argument
+
+Use `rlang::maybe_missing()`:
+
+```{r}
+arg <- missing_arg()
+expr(foo(!!maybe_missing(arg), !!maybe_missing(arg)))
+```
+
+### 19.4.4: Unquoting special forms
+
+`$` cause syntax error wit hunquoting. `$` must always be followed by name of a variable NOT an expression. Use prefix form '`$`()'.
+
+```{r}
+expr(df$!!x)
+
+x <- expr(x)
+expr(`$`(df, !!x))
+```
+
+### 19.4.5: Unquoting many arguments
+
+`!!!` (unquote-splice): one-to-many replacement. List of expressions and inserts at location of `!!!`. Can be used in any rlang function with `...` quoted OR evaluated.
+
+```{r}
+xs <- exprs(1, a, -b)
+expr(f(!!!xs, y))
+
+ys <- set_names(xs, c("a", "b", "c"))
+expr(f(!!!ys, d = 4))
+```
+
+
+### 19.4.6: `!!`
+
+Repeated application of `!`
+
+```{r}
+!TRUE
+!!TRUE
+!!!TRUE
+```
+
+Behave as operators on precedence level of `+` and `-`. If misused, can get silent errors. 
+
+
+For actual double negation use `!(!x)`, parentheses.
+
+### 19.4.7: Non-standard ASTs
+
+Unquoting can lead to non-standard ASTs >>> ASTs with components that are NOT expressions. 
+
+Inline compelx objects >>> attributes NOT printed.
+- Use `rlang::expr_print()` and `lobstr::ast()`
+
+```{r}
+x1 <- expr(class(!!data.frame(x = 10)))
+x1
+eval(x1)
+
+expr_print(x1)
+lobstr::ast(!!x1)
+```
+
+
+### exercise 
+
+
+1.
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+2.
 
 
 
