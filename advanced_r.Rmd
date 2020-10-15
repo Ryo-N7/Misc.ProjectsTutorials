@@ -9288,13 +9288,401 @@ lobstr::ast(!!x1)
 2.
 
 
+## 19.5 Non-quoting
+
+Base R: uses `bquote()` for quasiquotation. `.()` for unquoting.
+
+```{r}
+xyz <- bquote((x + y + z))
+bquote(-.(xyz) / 2)
+```
+
+Limitations:
+- Only easily used for own code, hard to apply to code supplied by user.
+- No unquote-splice operator for multiple expressions in a list
+- Inability to handle code within environment
+
+Base R prefers to selectively turn quoting off rather than unquoting.
+
+1. A pair of quoting and non-quoting functions. Refer to variable indirectly via `[[` for name of variable as a string instead. 
+
+```{r}
+x <- list(var = 1, y = 2)
+var <- "y"
+
+x$var
+x[[var]]
+```
+
+
+2. Pair of quoting and non-quoting arguments. 
+Ex. `rm()`: provide bare variables names in `...` or char vec of variable names in `list()`
+
+```{r}
+x <- 1
+rm(x)
+
+y <- 2
+vars <- c("y", "vars")
+rm(list = vars)
+```
+
+
+3. Argument control arguments that are quoting vs. non-quoting.
+Ex. `library()`: 'character.only' argument controls quoting behavior of first argument 'package'. Similarly in `demo()`, `detach()`, `example()`, `require()`.
+
+```{r}
+library(MASS)
+
+pkg <- "MASS"
+library(pkg, character.only = TRUE)
+```
+
+
+4. Quoting if evaluation fails. 
+
+Ex. `help()`: first argument non-quoting if evaluate to string, if fail then quoted. Similar with `ls()`, `page()`, `match.fun()`.
+
+```{r}
+help(var)
+
+var <- "mean"
+help(var)
+
+var <- 10
+help(var)
+```
+
+Base modelling + plotting functions use NSE.
+
+Ex. `lm()` quotes 'weight' and subset' arguments.
+`plot()` quotes aesthetic arguments when using a formula. 
+
+```{r}
+plot(
+  Sepal.Length ~ Petal.Length,
+  data = iris,
+  col = Species, # instead of col = iris$Species 
+  pch = 20,
+  cex = 2
+)
+```
+
+
+## 19.6 `...`
+
+`!!!`: useful as can have list of expressions to insert into a call. 
+
+Ex. 1: Elements in `...` stored in list. List of data frames to bind together?
+
+```{r}
+dfs <- list(
+  a = data.frame(x = 1, y = 2),
+  b = data.frame(x = 3, y = 4)
+)
+```
+
+Could specify `dfs$a` and `dfs$b` but what about lists of arbitrary lengths?
+
+```{r}
+dplyr::bind_rows(!!!dfs)
+```
+
+"spatting" or "argument unpacking".
+
+Ex. 2: Supply argument name indirectly. Create single col df where column name is specified in variable. 
+
+```{r}
+var <- "x"
+val <- c(4, 3, 9)
+```
+
+Create df and then change names via `setNames(data.frame(val), var)`?
+
+Unquote left side of `=` to interpret 'var' literally, use value stored inside 'var' variable.
+
+```{r}
+tibble::tibble(!!var := val)
+```
+
+Need use `:=` as R can not have expressions as argument names. Used in {data.table} as well.
+
+### 19.6.1: Examples
+
+Tidy dots: use `list2()`.
+
+Ex. create wrapper around `attributes()` to set attributes flexibly. 
+
+```{r}
+set_attr <- function(.x, ...) {
+  attr <- rlang::list2(...)
+  attributes(.x) <- attr
+  .x
+}
+
+attrs <- list(x = 1, y = 2)
+attr_name <- "z"
+
+1:10 %>% 
+  set_attr(w = 0, !!!attrs, !!attr_name := 3) %>% 
+  str()
+```
+
+## 19.6.2: `exec()`
+
+For functions without tidy dots use `exec()`. Supply arguments directly in `...` or indirectly via a list.
+
+```{r}
+exec("mean", x = 1:10, na.rm = TRUE, trim = 0.1)
+
+args <- list(x = 1:10, na.rm = TRUE, trim = 0.1)
+exec("mean", !!!args)
+
+params <- list(na.rm = TRUE, trim = 0.1)
+exec("mean", x = 1:10, !!!params)
+```
+
+Supply argument names indirectly:
+
+```{r}
+arg_name <- "na.rm" 
+arg_val <- TRUE
+exec("mean", 1:10, !!arg_name := arg_val)
+```
+
+Vector of function names or list of functions with same arguments:
+
+```{r}
+x <- c(runif(10), NA)
+funs <- c("mean", "median", "sd")
+
+purrr::map_dbl(funs, exec, x, na.rm = TRUE)
+```
+
+`exec()` evaluates expression vs. `call2()` returns an expression
+
+
+### 19.6.3: `dots_list()`
+
+`list2()`: default ignore empty arguments. Change order of variables without worrying about final `,`. 
+
+`list2()`: wrapper around `rlang::dots_list()` with defaults. Call `dots_list()` directly for more control over settings. 
+
+* `.ignore_empty` allows you to control exactly which arguments are ignored. The default ignores a single trailing argument to get the behaviour described above, but you can choose to ignore all missing arguments, or no missing arguments.
+
+* `.homonyms` controls what happens if multiple arguments use the same name:
+
+* If there are empty arguments that are not ignored, `.preserve_empty` controls what to do with them. The default throws an error; setting `.preserve_empty = TRUE` instead returns missing symbols. This is useful if you’re using `dots_list()` to generate function calls.
+
+### 19.6.4: Base R 
+
+`do.call()`: 
+
+'what': give function to call
+'args': list of arguments to pass to function. 
+
+Ex. `do.call("f", list(x, y, z))` == `f(x, y, z)`
+
+```{r}
+do.call("rbind", dfs)
+
+args <- list(val)
+names(args) <- var 
+
+do.call("data.frame", args)
+```
+
+
+Some base functions avoid `do.call()` by taking components of list or taking both `...` and `.dots` and concatenate together.
+
+### exercise 
+
+
+1.
+
+exec() takes a function and its arguments as input, as well as an environment. This allows to construct a call from the function and the arguments and evaluate it in the supplied environment. As the ... argument is handled via list2(), exec() supports tidy dots (quasiquotation), which means that arguments and names (on the left-hand-side of :=) can be unquoted via !! and !!!.
 
 
 
+2.
+
+
+3.
+
+
+set_attr() expects an object to be passed as the x argument and its new attributes via the dots. Unfortunately, this prohibits us to provide attributes named x as these would collide with the argument name of our object. Even omitting the object’s argument name doesn’t help in this case - as can be seen in the example where the object is consequently treated as an unnamed attribute.
+
+However, we may name the first argument .x, which seems clearer and less likely to invoke errors. In this case 1:10 will get the (named) attribute x = 10 assigned:
 
 
 
+## 19.7 Case studies
 
+### 19.7.1: `lobstr::ast()`
+
+```{r}
+z <- expr(foo(x, y))
+lobstr::ast(z)
+
+## use !!
+lobstr::ast(!!z)
+```
+
+
+### 19.7.2: Map-reduce to generate code
+
+Linear model with coefficients:
+
+```{r}
+intercept <- 10
+coefs <- c(x1 = 5, x2 = -4)
+```
+
+Turn character names vector in a list of symbols >>> `rlang::syms()`
+
+```{r}
+coef_sym <- syms(names(coefs))
+coef_sym
+```
+
+COmbine each variable name with coefficient. Add intercept to summands vector.
+
+```{r}
+summands <- map2(coef_sym, coefs, ~ expr((!!.x * !!.y)))
+summands
+
+summands <- c(intercept, summands)
+summands
+```
+
+Reduce individual terms to a single sum:
+
+```{r}
+eq <- reduce(summands, ~ expr(!!.x + !!.y))
+eq
+```
+
+Function:
+
+```{r}
+linear <- function(var, val) {
+  var <- ensym(var)
+  coef_name <- map(seq_along(val[-1]), ~ expr((!!var)[[!!.x]]))
+  
+  summands <- map2(val[-1], coef_name, ~ expr((!!.x * !!.y)))
+  summands <- c(val[[1]], summands)
+  
+  reduce(summands, ~ expr(!!.x + !!.y))
+}
+
+linear(x, c(10, 5, -4))
+
+linear(xy, c(10, 5, -4))
+
+linear(coefthingy, c(10, 5, -4))
+```
+
+### 19.7.3: Slicing an array
+
+Extract slice of an array using a dimension and index.
+
+Generate call with multiple missing arguments. 
+
+```{r}
+indices <- rep(list(missing_arg()), 3)
+expr(x[!!!indices])
+
+indices[[2]] <- 1
+expr(x[!!!indices])
+
+slice <- function(x, along, index) {
+  stopifnot(length(along) == 1)
+  stopifnot(length(index) == 1)
+    
+  nd <- length(dim(x))
+  indices <- rep(list(missing_arg()), nd)
+  indices[[along]] <- index
+  
+  expr(x[!!!indices])
+}
+
+x <- array(sample(30), c(5, 2, 3))
+slice(x, 1, 3)
+#> x[3, , ]
+slice(x, 2, 2)
+#> x[, 2, ]
+slice(x, 3, 1)
+#> x[, , 1]
+```
+
+
+
+### 19.7.4: Creating functions
+
+Create function from components >>> arguments, body, environment
+
+```{r}
+new_function(
+  exprs(x = , y = ),
+  expr({x + y})
+)
+```
+
+Empty arguments in `exprs()` generate arguments with NO defaults.
+
+Alternative to function factories with scalar/symbol arguments. 
+
+Ex. Generate function to raise function to a power of a number:
+
+```{r}
+power <- function(exponent) {
+  new_function(
+    exprs(x = ),
+    expr({
+      x ^ !!exponent
+    }),
+    caller_env()
+  )
+}
+
+power(0.5)
+```
+
+`graphics::curve()`: plot mathematical expressions without creating a function.
+
+```{r}
+curve(sin(exp(4 * x)), n = 1000)
+```
+
+
+`x`: pronoun, NOT represent a single concrete value. A placeholder that varies over the range of the plot. 
+
+Turn expression into a function with single argument `x`.
+
+```{r}
+curve2 <- function(expr, xlim = c(0, 1), n = 100) {
+  expr <- enexpr(expr)
+  f <- new_function(exprs(x = ), expr)
+  
+  x <- seq(xlim[1], xlim[2], length = n)
+  y <- f(x)
+
+  plot(x, y, type = "l", ylab = expr_text(expr))
+}
+curve2(sin(exp(4 * x)), n = 1000)
+```
+
+
+### exercise
+
+
+1.
+
+
+2.
+
+
+3.
 
 
 
