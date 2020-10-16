@@ -9691,18 +9691,432 @@ curve2(sin(exp(4 * x)), n = 1000)
 
 # 20 Evaluation
 
+User: inverse of quotation = unquotation, give user the ability to selectively evaluate parts of an otherwise quoted argument
+
+Developer: complement of quotation = evaluation, give developer ability to evaluate quoted expressions in custom environment to achieve specific goals
+
+Quosure: data structure that captures expression along with environment >> found in function arguments.
+
+Data mask: Ability to easily evaluate expression in context of data frame. 
+
+TIdy evaluation: Approach to NSE to use functions interactively AND inside other functions.
+
+## 20.2 Evaluation basics
+
+`eval()`
+
+- 'expr': object to evaluate, symbol or expression. use with `expr()`. Evaluated and NOT quoted. 
+
+```{r}
+x <- 10
+eval(expr(x))
+
+y <- 2
+eval(expr(x + y))
+```
+
+- 'env': environment in which expression should be evaluated. Default = current environment.
+
+```{r}
+eval(expr(x + y), env(x = 1000))
+```
+
+### 20.2.1: Application `local()`
+
+After creation of intermediate variables, remove somehow. Use `rm()` or use `local()`.
+
+```{r}
+rm(x, y)
+
+foo <- local({
+  x <- 10
+  y <- 200
+  
+  x + y 
+})
+
+foo
+
+x
+
+y
+```
+
+`local()`: captures input expression, creates new "local" environment for evaluation. Emulates running `epxr()` as though inside a function. 
+
+```{r}
+local2 <- function(expr) {
+  env <- env(caller_env())
+  eval(enexpr(expr), env)
+}
+
+foo <- local2({
+  x <- 10
+  y <- 200
+  x + y 
+})
+
+foo;x;y
+```
+
+
+`base::local()`: complicated as uses `eval()` and `substitute()` together. 
+
+### 20.2.2: Application `source()`
+
+Read in file from disk, use `parse_expr()` to parse string into a list of expressions, use `eval()` to evaluate each element in turn. 
+
+```{r}
+source2 <- function(path, env = caller_env()) {
+  file <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  exprs <- parse_exprs(file)
+
+  res <- NULL
+  for (i in seq_along(exprs)) {
+    res <- eval(exprs[[i]], env)
+  }
+
+  invisible(res)
+}
+```
+
+### 20.2.3: `function()`
+
+If available functions print 'srcref' attribute, which doesn't know quasiquotation so returns evaluated value of code in `f`. Use `new_function()` or remove 'srcref' attribute to avoid problem. 
+
+```{r}
+x <- 10
+y <- 20
+f <- eval(expr(function(x, y) !!x + !!y))
+
+f
+f()
+```
+
+### exercise 
+
+
+1.
 
 
 
+2.
+
+
+3.
+
+
+4.
 
 
 
+5.
+
+## 20.3 Quosures
+
+Quosure: `eval()` needs both expression AND environment. Necessitate data structure to hold both. Quosure object contains expression AND environment. Quotes expression and encloses the environment. 
+
+### 20.3.1: Creating 
+
+- `enquo() | enquos()`: capture user-supplied expressions
+
+```{r}
+foo <- function(x) enquo(x)
+
+foo(a + b)
+```
+
+- `quo() | quos()`: match `expr() | exprs()`. `expr()` or careful unquoting may be more correct.
+
+```{r}
+quo(x + y + z)
+```
+
+- `new_quosure()`: Create quosure from expressio nand environment components.
+
+```{r}
+new_quosure(expr(x + y), env(x = 1, y = 10))
+```
+
+### 20.3.2: Evaluating 
+
+`eval_tidy()`: evaluation function, input of single quosure. 
+
+```{r}
+q1 <- new_quosure(expr(x + y), env(x = 1, y = 10))
+
+eval_tidy(q1)
+
+eval(get_expr(q1), get_env(q2))
+```
+
+### 20.3.3: Dots
+
+Possible for arguments to `...` be associated with different environment. 
+
+Ex. Quosures with 'x' expression but in different environments
+
+```{r}
+f <- function(...) {
+  x <- 1
+  g(..., f = x)
+}
+
+g <- function(...) {
+  enquos(...)
+}
+
+x <- 0
+qs <- f(global = x)
+qs
+
+map_dbl(qs, eval_tidy)
+```
+
+### 20.3.4: Under the hood
+
+Formulas: capture expression and environment. 
+
+```{r}
+f <- ~runif(3)
+str(f)
+```
+Quosures are subclass of formulas. Quosures are call objects with attribute taht stores environment. 
+
+```{r}
+q4 <- new_quosure(expr(x + y + z))
+class(q4)
+is_call(q4)
+attr(q4, ".Environment")
+
+get_expr(q4)
+get_env(q4)
+```
+
+Use `get_expr()` and `get_env()` to extract expression or environment. 
+
+### 20.3.5: Nested quosures 
+
+Use quasiquotation to embed quosure in expression.
+
+Ex. inlines 2 quosures into an expression
+
+```{r}
+q2 <- new_quosure(expr(x), env(x = 1))
+q3 <- new_quosure(expr(x), env(x = 10))
+
+x <- expr(!!q2 + !!q3)
+
+eval_tidy(x)
+x
+expr_print(x) ## quosures colored according to environment
+```
+
+### exercise 
+
+```{r}
+q1 <- new_quosure(expr(x), env(x = 1))
+q1
+#> <quosure>
+#> expr: ^x
+#> env:  0x5fec4f8
+
+q2 <- new_quosure(expr(x + !!q1), env(x = 10))
+q2
+#> <quosure>
+#> expr: ^x + (^x)
+#> env:  0x66c6948
+
+q3 <- new_quosure(expr(x + !!q2), env(x = 100))
+q3
+
+expr_print(q3)
+```
+
+## 20.4: Data masks 
+
+Data mask: data frame where evaluated code will look first for variable definitions. 
+
+Ex. `with() | subset() | transform()`, used in {dplyr}, {ggplot2}
+
+### 20.4.1: Basics 
+
+Data mask: mingle variables from environment and data frame in a single expression. Supply as 2nd argument to `eval_tidy()`.
+
+```{r}
+q1 <- new_quosure(expr(x * y), env(x = 100))
+df <- data.frame(y = 1:10)
+
+eval_tidy(q1, df)
+```
+
+```{r}
+with2 <- function(data, expr) { 
+  expr <- enquo(expr)
+  eval_tidy(expr, data)
+}
+```
+
+```{r}
+x <- 100
+with2(df, x * y)
+```
+
+Base R: 
+
+```{r}
+with3 <- function(data, expr) {
+  expr <- substitute(expr)
+  eval(expr, data, caller_env())
+}
+```
 
 
+### 20.4.2: Pronouns
+
+Data masks introduce ambiguity. Don't know if 'x' from data mask OR the environment.
+
+```{r}
+with2(df, x)
+```
+
+`.data`: always refer to 'x' in data mask
+
+`.env`: always refer to 'x' in environment
+
+```{r}
+x <- 1 
+df <- data.frame(x = 2)
+
+with2(df, .data$x)
+with2(df, .env$x)
+```
+
+Subset with `[[`.
 
 
+### 20.4.3: Application `subset()`
+
+Select rows of data frame ~ `dplyr::filter()`. Data + expression evaluated in context of data to filter. DOn't have to refer to `df$x` `df$y` every time.
+
+```{r}
+sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
+
+# Shorthand for sample_df[sample_df$a >= 4, ]
+subset(sample_df, a >= 4)
+#>   a b c
+#> 4 4 2 4
+#> 5 5 1 1
+
+# Shorthand for sample_df[sample_df$b == sample_df$c, ]
+subset(sample_df, b == c)
+```
+
+`subset2()`: data frame 'data' and expression 'rows' arguments. 'rows' evaluated using 'data' as data mask. Use results to subbset the data frame with `[`.
+
+```{r}
+subset2 <- function(data, rows) {
+  rows <- enquo(rows)
+  rows_val <- eval_tidy(rows, data)
+  stopifnot(is.logical(rows_val))
+  
+  data[rows_val, , drop = FALSE]
+}
+
+subset2(sample_df, b == c)
+```
 
 
+### 20.4.4: Application `transform()`
+
+
+`base::transform()`: add new variables to dataframe. Evaluate expressions in context of existing variables. 
+
+```{r}
+df <- data.frame(x = c(2, 3, 1), y = runif(3))
+transform(df, x = -x, y2 = 2 * y)
+```
+
+
+`transform2()`: Capture unevaluated `...` with `enquos(...)`. Evaluate each expression with `for` loop. 
+
+```{r}
+transform2 <- function(.data, ...) {
+  dots <- enquos(...)
+
+  for (i in seq_along(dots)) {
+    name <- names(dots)[[i]]
+    dot <- dots[[i]]
+
+    .data[[name]] <- eval_tidy(dot, .data)
+  }
+
+  .data
+}
+
+transform2(df, x2 = x * 2, y = -y)
+```
+
+
+### 20.4.5: Application `select()`
+
+
+Data mask ~ data frame but useful to provide a list. 'select' argument in `base::subset()`. Refer to variables as if they were numbers.
+
+```{r}
+df <- data.frame(a = 1, b = 2, c = 3, d = 4, e = 5)
+subset(df, select = b:d)
+```
+
+Create named list where each component gives position of corresponding variable. 
+
+```{r}
+vars <- as.list(set_names(seq_along(df), names(df)))
+
+seq_along(df)
+names(df)
+
+str(vars)
+```
+
+
+### exercise 
+
+1.
+
+
+A for loop applies the processing steps regarding .data iteratively. This includes updating .data and reusing the same variable names. This makes it possible to apply transformations sequentially, so that subsequent transformations can refer to columns that were just created.
+
+2. 
+
+
+3. 
+
+
+```{r}
+arrange2 <- function(.df, ..., .na.last = TRUE) {
+  browser()
+  # Capture and quote arguments, which determine the order
+  args <- enquos(...)  
+  
+  # `!!!`: unquote-splice arguments into order()
+  # `!!.na.last`: pass option for treatment of NAs to order()
+  # return expression-object
+  order_call <- expr(order(!!!args, na.last = !!.na.last))
+  
+  # Evaluate order_call within .df
+  ord <- eval_tidy(order_call, .df)    
+  # Ensure that no rows are dropped
+  stopifnot(length(ord) == nrow(.df))  
+  
+  # Reorder rows via integer subsetting
+  .df[ord, , drop = FALSE]  
+}
+
+arrange2(mtcars, cyl)
+```
+
+## 20.5 Using tidy evaluation
 
 
 
