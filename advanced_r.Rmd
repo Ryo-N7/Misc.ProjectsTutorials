@@ -10118,11 +10118,332 @@ arrange2(mtcars, cyl)
 
 ## 20.5 Using tidy evaluation
 
+### 20.5.1: Quoting & unquoting
+
+```{r}
+resample <- function(df, n) {
+  idx <- sample(nrow(df), n, replace = TRUE)
+  df[idx, , drop = FALSE]
+}
+```
+
+Create function resample and subset in single step.
+
+Below NOT work as `subsample()` not quote arguments so `cond` is evaluated normally, error when try find binding for `x`. 
+
+```{r}
+subsample <- function(df, cond, n = nrow(df)) {
+  df <- subset2(df, cond)
+  resample(df, n)
+}
+
+df <- data.frame(x = c(1, 1, 1, 2, 2), y = 1:5)
+subsample(df, x == 1)
+```
+
+Need to quote `cond`, then unquote when pass to `suset2()`. 
+
+```{r}
+subsample <- function(df, cond, n = nrow(df)) {
+  cond <- enquo(cond)
+  
+  df <- subset2(df, !!cond)
+  resample(df, n)
+}
+
+subsample(df, x == 1)
+```
+
+### 20.5.2: Handling ambiguity
+
+```{r}
+threshold_x <- function(df, val) {
+  subset2(df, x >= val)
+}
+```
+
+Return incorrect silently when `x` exists in calling environment but not in `df`:
+
+```{r}
+x <- 10 
+no_x <- data.frame(y = 1:3)
+
+threshold_x(no_x, 2)
+```
+
+Also if `val` exists in `df`:
+
+```{r}
+has_val <- data.frame(x = 1:3, val = 9:11)
+threshold_x(has_val, 2)
+```
+
+Fail as tidy  evaluation is ambiguous, each variable can be found in either data mask OR environment. Remove ambiguity with `.data` and `.env` pronouns.
+
+```{r}
+threshold_x <- function(df, val) {
+  subset2(df, .data$x >= .env$val)
+}
+
+x <- 10
+threshold_x(no_x, 2)
+threshold_x(has_val, 2)
+```
+
+Or use unquoting:
+
+```{r}
+threshold_x <- function(df, val) {
+  subset2(df, .data$x >= !!val)
+}
+```
+
+If unquote, `val` early evaluated by `enquo()`. If pronoun, `val` lazy evaluated by `eval_tidy()`. 
 
 
+### 20.5.3: Quoting and ambiguity
+
+```{r}
+threshold_var <- function(df, var, val) {
+  var <- as_string(ensym(var))
+  subset2(df, .data[[var]] >= !!val)
+}
+
+df <- data.frame(x = 1:10)
+threshold_var(df, x, 8)
+
+threshold_expr <- function(df, expr, val) {
+  expr <- enquo(expr)
+  subset2(df, !!expr >= !!val)
+}
+```
+
+It’s not possible to evaluate expr only in the data mask, because the data mask doesn’t include any functions like + or ==. Here, it’s the user’s responsibility to avoid ambiguity. As a general rule of thumb, as a function author it’s your responsibility to avoid ambiguity with any expressions that you create; it’s the user’s responsibility to avoid ambiguity in expressions that they create.
+
+### exercise
+
+We can see, that threshold_var2() no longer coerces the symbol to a string. Therefore `$` instead of [[ can be used for subsetting. Initially we suspected partial matching would be introduced by `$`, but .data deliberately avoids this problem.
+
+The prefix call to `$()` is less common than infix-subsetting using `[[`, but ultimately both functions behave the same.
 
 
+## 20.6 Base Evaluation
 
+* `substitute()`: and evaluation in caller environment. ex: `subset()`. 
+
+* `match.call()`: call manipulation, evaluation in caller environment. ex: `write.csv()`, `lm()`. 
+
+
+### 20.6.1: `substitute()`
+
+`substitute()` + `eval()`: most common form of NSE in base R. 
+
+`subset_base()`: argument evaluated in caller environment.
+`subset_tidy()`: argument evaluated in environment where defined.
+
+```{r}
+subset_base <- function(data, rows) {
+  rows <- substitute(rows)
+  rows_val <- eval(rows, data, caller_env())
+  stopifnot(is.logical(rows_val))
+
+  data[rows_val, , drop = FALSE]
+}
+
+subset_tidy <- function(data, rows) {
+  rows <- enquo(rows)
+  rows_val <- eval_tidy(rows, data)
+  stopifnot(is.logical(rows_val))
+
+  data[rows_val, , drop = FALSE]
+}
+```
+
+
+### 20.6.1.1: Programming with `subset()`
+
+* `base::subset()`: always evaluates rows in calling environment, but if `...` used, then expression might need to be evaluated elsewhere.
+
+```{r}
+f1 <- function(df, ...) {
+  xval <- 3
+  subset_base(df, ...)
+}
+
+my_df <- data.frame(x = 1:3, y = 3:1)
+xval <- 1
+f1(my_df, x == xval)
+```
+
+`subset_base()` can NOT work with functionals >>> `map()` or `lapply()`:
+
+```{r}
+local({
+  zzz <- 2
+  dfs <- list(data.frame(x = 1:3), data.frame(x = 4:6))
+  lapply(dfs, subset_base, x == zzz)
+})
+```
+
+* `subset()`: calling from another function requires care, need use `substitute()` to capture call to `subset()` complete expression and then evaluate. No syntactic marker for unquoting in `substitute()`. 
+
+```{r}
+f2 <- function(df1, expr) {
+  call <- substitute(subset_base(df1, expr))
+  expr_print(call)
+  eval(call, caller_env())
+}
+
+my_df <- data.frame(x = 1:3, y = 3:1)
+f2(my_df, x == 1)
+```
+
+
+* `eval()` does NOT provide pronouns so no way to require part of expression to come from data. Need manually check for presence of `z` in `df`.
+
+```{r}
+f3 <- function(df) {
+  call <- substitute(subset_base(df, z > 0))
+  expr_print(call)
+  eval(call, caller_env())
+}
+
+my_df <- data.frame(x = 1:3, y = 3:1)
+z <- -1
+f3(my_df)
+```
+
+### `[`
+
+
+`subset()` > `[`
+
+* `drop = FALSE` by default, always guaranteed to return data frame
+* drop rows where condition evaluates to NA
+
+`subset(df, x == y) != df[x == y, ]`
+
+`df[x == y & !is.na(x == y), , drop = FALSE]`
+
+### 20.6.2: `match.call()`
+
+Capture complete  call with `match.call()`, modify, evaluate result. 
+
+```{r}
+g <- function(x, y, z) {
+  match.call()
+}
+g(1, 2, z = 3)
+```
+
+```{r}
+write.csv <- function(...) {
+  call <- match.call(write.table, expand.dots = TRUE)
+
+  call[[1]] <- quote(write.table)
+  call$sep <- ","
+  call$dec <- "."
+
+  eval(call, parent.frame())
+}
+
+write.csv <- function(...) {
+  write.table(..., sep = ",", dec = ".")
+}
+```
+
+### 20.6.2.1: Wrapping modelling functions
+
+```{r}
+lm2 <- function(formula, data) {
+  lm(formula, data)
+}
+
+lm2(mpg ~ disp, mtcars)
+```
+
+Suboptimal: `lm()` captures call and display when printing. Need to capture arguments, create call to `lm()` with unquoting, evaluate call. 
+
+
+```{r}
+lm3 <- function(formula, data, env = caller_env()) {
+  formula <- enexpr(formula)
+  data <- enexpr(data)
+
+  lm_call <- expr(lm(!!formula, data = !!data))
+  expr_print(lm_call)
+  eval(lm_call, env)
+}
+
+lm3(mpg ~ disp, mtcars)
+```
+
+Wrapping base NSE function:
+
+* Capture unevaluated arguments using `enexpr()`, capture caller environment using `caller_env()`.
+* Generate new expression using `expr()` and unquoting
+* Evaluate expression in caller environment. Arguments need to be defined in caller environment. `env` argument for setting default environment yourself.
+
+Use `enxpr()` for unquoting to generate formulas dynamically: 
+
+```{r}
+resp <- expr(mpg)
+disp1 <- expr(vs)
+disp2 <- expr(wt)
+lm3(!!resp ~ !!disp1 + !!disp2, mtcars)
+```
+
+
+### 20.6.2.2: Evaluation environment
+
+Mingle objects supplied by user with objects created inside function. 
+
+Auto-resampling `lm()`:
+
+```{r}
+resample_lm0 <- function(formula, data, env = caller_env()) {
+  formula <- enexpr(formula)
+  resample_data <- resample(data, n = nrow(data))
+
+  lm_call <- expr(lm(!!formula, data = resample_data))
+  expr_print(lm_call)
+  eval(lm_call, env)
+}
+
+df <- data.frame(x = 1:10, y = 5 + 3 * (1:10) + round(rnorm(10), 2))
+resample_lm0(y ~ x, data = df)
+```
+
+NOT work as evaluating `lm_call` in caller environment but `resample_data` exists in execution environment. 
+
+1. Unquote data frame into call. Inlining expressions. 
+
+```{r}
+resample_lm1 <- function(formula, data, env = caller_env()) {
+  formula <- enexpr(formula)
+  resample_data <- resample(data, n = nrow(data))
+
+  lm_call <- expr(lm(!!formula, data = !!resample_data))
+  expr_print(lm_call)
+  eval(lm_call, env)
+}
+resample_lm1(y ~ x, data = df)$call
+```
+
+2. Create new environment that inherits from caller, bind vars that created inside function to that environment.
+
+```{r}
+resample_lm2 <- function(formula, data, env = caller_env()) {
+  formula <- enexpr(formula)
+  resample_data <- resample(data, n = nrow(data))
+
+  lm_env <- env(env, resample_data = resample_data)
+  lm_call <- expr(lm(!!formula, data = resample_data))
+  expr_print(lm_call)
+  eval(lm_call, lm_env)
+}
+resample_lm2(y ~ x, data = df)
+```
 
 
 
