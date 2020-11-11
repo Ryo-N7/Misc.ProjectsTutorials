@@ -10446,12 +10446,458 @@ resample_lm2(y ~ x, data = df)
 ```
 
 
+### exercise
+
+1.
+
+```{r}
+lm3a <- function(formula, data) {
+  formula <- enexpr(formula)
+  
+  lm_call <- expr(lm(!!formula, data = data))
+  eval(lm_call, caller_env())
+}
+lm3a(mpg ~ disp, mtcars)$call
+```
+
+In this function, lm_call is evaluated in the caller environment, which happens to be the global environment. In this environment, the name data is bound to utils::data. To fix the error, we can either set the evaluation environment to the functions execution environment or unquote the data argument when building the call to lm().
+
+```{r}
+# Change evaluation environment
+lm3b <- function(formula, data) {
+  formula <- enexpr(formula)
+  
+  lm_call <- expr(lm(!!formula, data = data))
+  eval(lm_call, current_env())
+}
+
+lm3b(mpg ~ disp, mtcars)$call
+```
+
+When we want to unquote an argument within a function, we first need to capture the user-input (by enenxpr()).
+
+```{r}
+lm3c <- function(formula, data) {
+  formula <- enexpr(formula)
+  data_quo <- enexpr(data)
+  
+  lm_call <- expr(lm(!!formula, data = !!data_quo))
+  eval(lm_call, caller_env())
+}
+lm3c(mpg ~ disp, mtcars)$call
+```
 
 
+
+2.
+
+
+```{r}
+lm(mpg ~ disp, data = mtcars)
+lm(mpg ~ I(1 / disp), data = mtcars)
+lm(mpg ~ disp * cyl, data = mtcars)
+```
+
+
+
+
+```{r}
+lm_wrap <- function(pred, resp = mpg, data = mtcars, env = caller_env()) {
+  pred <- enexpr(pred)
+  resp <- enexpr(resp)
+  data <- enexpr(data)
+  
+  formula <- expr(!!resp ~ !!pred)
+  lm_call <- expr(lm(!!formula, data = !!data))
+  eval(lm_call, envir = env)
+}
+
+# Test if the output looks ok
+lm_wrap(I(1 / disp) + disp * cyl)
+#> 
+#> Call:
+#> lm(formula = mpg ~ I(1/disp) + disp * cyl, data = mtcars)
+#> 
+#> Coefficients:
+#> (Intercept)    I(1/disp)         disp          cyl     disp:cyl  
+#>   -1.22e+00     1.85e+03     7.68e-02     1.18e+00    -9.14e-03
+
+# Test if the result is identical to calling lm() directly
+identical(
+  lm_wrap(I(1 / disp) + disp * cyl),
+  lm(mpg ~ I(1 / disp) + disp * cyl, data = mtcars)
+)
+```
+
+
+3.
+
+```{r}
+resample_lm0 <- function(
+  formula, data,
+  resample_data = data[sample(nrow(data), replace = TRUE), ,
+                       drop = FALSE],
+  env = current_env()
+) {
+  formula <- enexpr(formula)
+  
+  lm_call <- expr(lm(!!formula, data = resample_data))
+  expr_print(lm_call)
+  eval(lm_call, env)
+}
+
+df <- data.frame(x = 1:10, y = 5 + 3 * (1:10) + round(rnorm(10), 2))
+(resamp_lm1 <- resample_lm0(y ~ x, data = df))
+#> lm(y ~ x, data = resample_data)
+#> 
+#> Call:
+#> lm(formula = y ~ x, data = resample_data)
+#> 
+#> Coefficients:
+#> (Intercept)            x  
+#>        4.85         3.02
+resamp_lm1$call
+```
 
 # 21 Translating R code
 
+## 21.2 HTML
 
+Tags: coding structure, nested, intermingled with text.
+
+Ex. body, h1, p, b, img
+
+Attributes: 'id', 'class' for control visual appearance with CSS
+
+Void tags: No children, no content, attributes >>> img: src, width, height
+
+< >: Escape via `&gt`, `&lt`
+
+&: `&amp;`
+
+### 21.2.1: Goal
+
+
+Generate HTML from R.
+
+```{html}
+<body>
+  <h1 id='first'>A heading</h1>
+  <p>Some text &amp; <b>some bold text.</b></p>
+  <img src='myimg.png' width='100' height='100' />
+</body>
+```
+
+```{r}
+with_html(
+  body(
+    h1("A heading", id = "first"),
+    p("Some text &", b("some bold text.")),
+    img(src = "myimg.png", width = 100, height = 100)
+  )
+)
+```
+
+* Nesting of function calls match nesting of tags
+* Unnamed args become content of tag, named args become arguments
+* Auto escape `&` and other special characters
+
+### 21.2.2: Escaping
+
+Need to automatically escape user input for `&`, `<`, `>`.
+
+Generated special characters are not double-escaped.
+
+Create S3 class distinguishing regular text vs. HTML.
+
+```{r}
+html <- function(x) structure(x, class = "advr_html")
+
+print.advr_html <- function(x, ...) {
+  out <- paste0("<HTML> ", x)
+  cat(paste(strwrap(out), collapse = "\n"), "\n", sep = "")
+}
+```
+
+Escape generic function:
+* `escape.character()`: regular char vec and return HTML vec with special char escaped.
+* `escape.adv_html()`: leaves already escaped HTML alone.
+
+```{r}
+escape <- function(x) UseMethod("escape")
+
+escape.character <- function(x) {
+  x <- gsub("&", "&amp;", x)
+  x <- gsub("<", "&lt;", x)
+  x <- gsub(">", "&gt;", x)
+
+  html(x)
+}
+
+escape.advr_html <- function(x) x
+```
+
+
+```{r}
+escape("This is some text.")
+#> <HTML> This is some text.
+escape("x > 1 & y < 2")
+#> <HTML> x &gt; 1 &amp; y &lt; 2
+
+# Double escaping is not a problem
+escape(escape("This is some text. 1 > 2"))
+#> <HTML> This is some text. 1 &gt; 2
+
+# And text we know is HTML doesn't get escaped.
+escape(html("<hr />"))
+#> <HTML> <hr />
+```
+
+### 21.2.3: Basic tag functions
+
+HTML tags can have attributes and children. For function call, need to separate. Use named vs. unnamed args to separate.
+
+```{r}
+p("Some text. ", b(i("some bold italic text")), class = "mypara")
+```
+
+Separate using `...`, whether they are /not named.
+
+```{r}
+dots_partition <- function(...) {
+  dots <- list2(...)
+  
+ if (is.null(names(dots))) {
+  is_named <- rep(FALSE, length(dots))
+} else {
+  is_named <- names(dots) != ""
+}
+  
+  list(
+    named = dots[is_named],
+    unnamed = dots[!is_named]
+  )
+}
+
+str(dots_partition(a = 1, 2, b = 3, 4))
+#> List of 2
+#>  $ named  :List of 2
+#>   ..$ a: num 1
+#>   ..$ b: num 3
+#>  $ unnamed:List of 2
+#>   ..$ : num 2
+#>   ..$ : num 4
+```
+
+Create `p()` function. 
+
+`html_attributes()`: takes named list and returns HTML attribute specification as string. 
+
+
+```{r}
+source("dsl-html-attributes.r")
+p <- function(...) {
+  dots <- dots_partition(...)
+  attribs <- html_attributes(dots$named)
+  children <- map_chr(dots$unnamed, escape)
+
+  html(paste0(
+    "<p", attribs, ">",
+    paste(children, collapse = ""),
+    "</p>"
+  ))
+}
+
+p("Some text")
+#> <HTML> <p>Some text</p>
+p("Some text", id = "myid")
+#> <HTML> <p id='myid'>Some text</p>
+p("Some text", class = "important", `data-value` = 10)
+#> <HTML> <p class='important' data-value='10'>Some text</p>
+```
+
+### 21.2.4: Tag functions
+
+Adapt `p()` to other tags. Replace "p" with name. Create function with `rlang::new_function()`. Use unquoting and `paste0()` to generate start/end tags.
+
+```{r}
+tag <- function(tag) {
+  new_function(
+    exprs(... = ),
+    expr({
+      dots <- dots_partition(...)
+      attribs <- html_attributes(dots$named)
+      children <- map_chr(dots$unnamed, escape)
+
+      html(paste0(
+        !!paste0("<", tag), attribs, ">",
+        paste(children, collapse = ""),
+        !!paste0("</", tag, ">")
+      ))
+    }),
+    caller_env()
+  )
+}
+tag("b")
+#> function (...) 
+#> {
+#>     dots <- dots_partition(...)
+#>     attribs <- html_attributes(dots$named)
+#>     children <- map_chr(dots$unnamed, escape)
+#>     html(paste0("<b", attribs, ">", paste(children, collapse = ""), 
+#>         "</b>"))
+#> }
+
+p <- tag("p")
+b <- tag("b")
+i <- tag("i")
+p("Some text. ", b(i("some bold italic text")), class = "mypara")
+#> <HTML> <p class='mypara'>Some text. <b><i>some bold italic
+#> text</i></b></p>
+```
+
+
+Handler for void tags. `void_tag()`.
+
+```{r}
+void_tag <- function(tag) {
+  new_function(
+    exprs(... = ),
+    expr({
+      dots <- dots_partition(...)
+      if (length(dots$unnamed) > 0) {
+        abort(!!paste0("<", tag, "> must not have unnamed arguments"))
+      }
+      attribs <- html_attributes(dots$named)
+
+      html(paste0(!!paste0("<", tag), attribs, " />"))
+    }),
+    caller_env()
+  )
+}
+
+img <- void_tag("img")
+img
+#> function (...) 
+#> {
+#>     dots <- dots_partition(...)
+#>     if (length(dots$unnamed) > 0) {
+#>         abort("<img> must not have unnamed arguments")
+#>     }
+#>     attribs <- html_attributes(dots$named)
+#>     html(paste0("<img", attribs, " />"))
+#> }
+img(src = "myimage.png", width = 100, height = 100)
+#> <HTML> <img src='myimage.png' width='100' height='100' />
+```
+
+### 21.2.5: Processing all tags
+
+```{r}
+tags <- c("a", "abbr", "address", "article", "aside", "audio",
+  "b","bdi", "bdo", "blockquote", "body", "button", "canvas",
+  "caption","cite", "code", "colgroup", "data", "datalist",
+  "dd", "del","details", "dfn", "div", "dl", "dt", "em",
+  "eventsource","fieldset", "figcaption", "figure", "footer",
+  "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header",
+  "hgroup", "html", "i","iframe", "ins", "kbd", "label",
+  "legend", "li", "mark", "map","menu", "meter", "nav",
+  "noscript", "object", "ol", "optgroup", "option", "output",
+  "p", "pre", "progress", "q", "ruby", "rp","rt", "s", "samp",
+  "script", "section", "select", "small", "span", "strong",
+  "style", "sub", "summary", "sup", "table", "tbody", "td",
+  "textarea", "tfoot", "th", "thead", "time", "title", "tr",
+  "u", "ul", "var", "video"
+)
+
+void_tags <- c("area", "base", "br", "col", "command", "embed",
+  "hr", "img", "input", "keygen", "link", "meta", "param",
+  "source", "track", "wbr"
+)
+```
+
+Some tags have similar names to base R functions. Place inside list and provide helper function to access them only when needed.
+
+```{r}
+html_tags <- c(
+  tags %>% set_names() %>% map(tag),
+  void_tags %>% set_names() %>% map(void_tag)
+)
+
+html_tags$p(
+  "Some text. ",
+  html_tags$b(html_tags$i("some bold italic text")),
+  class = "mypara"
+)
+#> <HTML> <p class='mypara'>Some text. <b><i>some bold italic
+#> text</i></b></p>
+```
+
+```{r}
+with_html <- function(code) {
+  code <- enquo(code)
+  eval_tidy(code, html_tags)
+}
+
+with_html(
+  body(
+    h1("A heading", id = "first"),
+    p("Some text &", b("some bold text.")),
+    img(src = "myimg.png", width = 100, height = 100)
+  )
+)
+#> <HTML> <body><h1 id='first'>A heading</h1><p>Some text &amp;<b>some
+#> bold text.</b></p><img src='myimg.png' width='100' height='100'
+#> /></body>
+```
+
+### exercise
+
+1.
+
+
+
+2.
+
+
+3.
+
+
+
+4.
+
+
+
+
+
+
+
+
+
+
+# V. Techniques
+
+
+# 22 Debugging
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 23 Measuring Performance
+
+# 24 Improving Performance
 
 
 
