@@ -11011,6 +11011,30 @@ Code crash R >>> look at C / C++ code.
 
 # 23 Measuring Performance
 
+Profile: measure run-time of each line of code with realistic inputs
+
+```{r}
+library(bench)
+library(profvis)
+```
+
+
+## 23.2 Profiling
+
+Accuracy vs. performance. Sampling profiler has minimal impact on performance but there's variability on acccuracy of timer and time taken by each operation.
+
+
+`profvis::profvis()`: Code in separate file then "source" in.
+
+## 23.3 Microbenchmarking
+
+Measure performance of a small piece of code >>> ms, microseconds, nanoseconds
+
+Useful for comparing smal snippets of code for specific tasks. 
+
+`bench::mark()`: return as tibble, one row for each input expression. 
+
+
 # 24 Improving Performance
 
 
