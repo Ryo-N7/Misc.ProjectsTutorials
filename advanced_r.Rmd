@@ -10880,20 +10880,134 @@ with_html(
 
 # 22 Debugging
 
+1. Google
+2. Reproducible/Repeatable
+3. Where?
+4. Fix & Test
+
+## 22.3 Locating errors
+
+`traceback()`: show sequence of calls that lead to error.
+
+```{r}
+f <- function(a) g(a)
+g <- function(b) h(b)
+h <- function(c) i(c)
+i <- function(d) {
+  if (!is.numeric(d)) {
+    stop("`d` must be numeric", call. = FALSE)
+  }
+  d + 10
+}
+
+f("A")
+traceback()
+```
 
 
+### 22.3.1: Lazy evaluation
+
+`traceback()`: linearises call tree, can be confusing if lazy evaluation involved.
+
+```{r}
+j <- function() k()
+k <- function() stop("Oops!", call. = FALSE)
+f(j())
+#> Error: Oops!
+
+traceback()
+```
+
+Try `rlang::with_abort()`, `rlang::last_trace()` instead.
+
+```{r}
+rlang::with_abort(f(j()))
+rlang::last_trace()
+```
+
+## 22.4 Interactive debugger
+
+Pause function and explore state.
+
+`browser()`
+
+### 22.4.1: `browser()` commands
+
+`Next`/`n`: executes next step in function
+
+`Step into`/`s`: step inside function
+
+`Finish`/`f`: finish execution of current loop/function
+
+`Continue`/`c`: Leave interactive debugging and continue regular execution of function
+
+`Stop`/`Q`: stop debugging, terminate function, return to global workspace.
+
+`Enter`: repeat previous command
+
+`where`: print stack trace of active calls
+
+### 22.4.2: Alternatives
+
+Breakpoints: left of line number or `Shift + F9`. 
+
+`recover()`: If error, prompt displaying traceback with `options(error = recover)`.
+
+`debug()`: insert browser statement in first line of specified function. `undebug()` removes. `debugonce()` to browse ONLY for next run. 
+
+`utils::setBreakpoint()`: input file name and line number.
+
+Call stack: differ between `traceback()`, `browser()`, `where`, `recover()`.
+
+## 22.5: Non-interactive debugging
+
+`callr::(function)`: run function in fresh session.
+
+Different global env? Different package load? Objects from previous session cause differences? 
+
+Working directory? 
+
+PATH environment variable? R_LIBS environment variable?
+
+`dump.frames()`: Saves `last.dump.rda` file. Debug code for non-interactive code.
+
+Print debugging: Insert numerous print statements to locate problem. See values of important variables. 
+
+RMarkdown:
+
+Switch to `rmarkdown::render("path/to/file.Rmd")` instead of button. 
+
+Use `sink()` to capture output in console. 
+
+```{r}
+options(error = function() {
+  sink()
+  recover()
+})
+```
 
 
+FOr traceback:
 
+```{r}
+options(rlang_trace_top_env = rlang::current_env())
+options(error = function() {
+  sink()
+  print(rlang::trace_back(bottom = sys.frame(-1)), simplify = "none")
+})
+```
 
+## 22.6: Non-error failures
 
+Function may generate unexpected warning. 
 
+Track down warnings by convert to errors `options(warn = 2)` and use call stack.
 
+Function may generate unexpected message. Use `rlang::with_abort()` to turn messages into errors.
 
+Function may niever return. 
 
-
-
-
+Code crash R >>> look at C / C++ code.
 
 # 23 Measuring Performance
 
