@@ -11037,19 +11037,84 @@ Useful for comparing smal snippets of code for specific tasks.
 
 # 24 Improving Performance
 
+## 24.2 Code organization
+
+1. Writing faster but incorrect code.
+2. Writing code that you think is faster, but is actually no better.
+
+## 24.3 Checking for existing solutions
 
 
+### exercise 
+
+1.
 
 
+2.
+
+3.
+
+4.
+
+5.
 
 
+## 24.4 Doing as little as possible
+
+Easiest way to make function faster is to let it do less work. Use functions tailored to a more specific type of input/output.
+
+* rowSums(), colSums(), rowMeans(), and colMeans() are faster than equivalent invocations that use apply() because they are vectorised (Section 24.5).
+
+* vapply() is faster than sapply() because it pre-specifies the output type.
+
+* If you want to see if a vector contains a single value, any(x == 10) is much faster than 10 %in% x because testing equality is simpler than testing set inclusion.
+
+Less work if functions given more information via arguments!
+
+* read.csv(): specify known column types with colClasses. (Also consider switching to readr::read_csv() or data.table::fread() which are considerably faster than read.csv().)
+
+* factor(): specify known levels with levels.
+
+* cut(): don’t generate labels with labels = FALSE if you don’t need them, or, even better, use findInterval() as mentioned in the “see also” section of the documentation.
+
+* unlist(x, use.names = FALSE) is much faster than unlist(x).
+
+* interaction(): if you only need combinations that exist in the data, use drop = TRUE.
+
+### 24.2.1: `mean()`
+
+Avoid method dispatch. Avoid costs in loop by doing method lookup only once. 
+
+S3: call `generic.class()` > `generic()`
+S4: `getMethod()` and save to variable, then call that function
+
+Ex. `mean.default()` > `mean()` for small vectors.
+
+X must be numeric vector or errors.
+
+Call `.Internal` directly. No input checking or NA handling. Speed > Safety.
+
+Increase in size: Time spent on computation > finding underlying implementation. Use realistic data for optimization tests.
+
+### 24.4.2: `as.data.frame()`
+
+Coerces each element into data frame and then `rbind()` together. 
+
+## 24.5 Vectorize
+
+Vectorizing: Vectors > scalars. 
+
+* Entire vectors > components of a vector
+* Loops in a vectorized function in C > R.
+
+Downside: harder to predict how operations will scale. 
+
+## 24.6 Avoiding copies.
+
+Create a bigger object >>> R allocate space for new object then copy old object to new home. 
 
 
-
-
-
-
-
+Modifying object in a loop can also create a copy, depending on class of x.
 
 
 
