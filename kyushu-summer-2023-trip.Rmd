@@ -1,0 +1,122 @@
+---
+title: "Kyushu Summer 2023"
+output: html_document
+date: '2023-07-07'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 7.21 (Fri)
+
+- https://www.oita-airport.jp/access/bus.html
+- https://wp.oitakotsu.co.jp/wp-content/uploads/jidousha/airport/pdf/01_2_20230701_20230731.pdf?v=1688711162844
+- https://www.keikyu-bus.co.jp/airport/h-nikotama/
+- 
+
+Haneda :: TERMINAL 2
+
+Futako-Tamagawa 8:40 AM >> Haneda 9:40 AM
+Futako-Tamagawa 9:40 AM >> Haneda 10:40 AM
+
+ANA - Haneda: 11:20 AM >> Oita: 12:55 PM
+
+BUS K 13:10 // 13:45 >> Oita Station 14:17 // 14:52
+BUS X 13:10 // 13:45 >> Oita Station 14:08 // 14:43
+
+Oita Funai Castle
+Old Otomo Residence/Garden
+Atami Onsen/Sento
+
+- https://www.city.oita.oita.jp/o204/bunkasports/shitebunkazai/1352943146749.html
+- https://www.city.oita.oita.jp/o204/bunkasports/shitebunkazai/documents/mappdf01.pdf
+
+
+
+# 7.22 (Sat)
+
+Beppu: Jigoku-meguri (4~5 hours?)
+Beppu: Takegawara Onsen
+
+- http://www.umijigoku.co.jp/info/
+- http://www.beppu-jigoku.com/access/index.html
+- https://www.tabikobo.com/tabi-pocket/japan/oita/article53102.html
+- https://www.ikyu.com/kankou/arealist8347/
+- https://thegate12.com/jp/article/109
+- https://travel.yahoo.co.jp/kanko/prefecture-oita/area-beppu/
+
+7.22 (Sat) 7 PM: Oita vs. Iwaki FC
+- https://www.oita-trinita.co.jp/access/
+
+# 7.23 (Sun)
+Travel to Kagoshima-Chuo >> 3~4 hours
+
+JR Kyushu: whosline6!
+
+Reimeikan Museum
+Shiroyama Park
+Kagoshima City Museum of Meiji Restoration
+Sengan-en 
+Amaminosato (not going to have time)
+Sakurajima (not going to have time)
+
+- CITY VIEW BUS: https://www.kagoshima-yokanavi.jp/downloads/media/9292
+
+- https://www.kagoshima-kankou.com/for
+- https://www.japan-guide.com/e/e4600.html
+- https://www.kagoshima-yokanavi.jp/en/spot
+
+7.23 (Sun) 6 PM: Kagoshima Utd vs. Ehime FC
+- https://kufc.co.jp/stadium_access/
+
+# 7.24 (Mon)
+
+Travel to Kumamoto >> ~1 hour
+
+Kumamoto Castle
+Suizenji Jojuen Garden
+
+- https://kumamoto.guide/en/spots/
+
+7.24 (Mon) 7 PM: Roasso Kumamoto vs. Fagiano Okayama
+
+- https://roasso-k.com/game_tickets/stadium_1
+
+# 7.25 (Tue)
+
+Kumamoto Station: Bus Stop 7 >> Airport Limousine Bus
+
+- https://transfer.navitime.biz/sankobus/pc/map/Top
+- https://transfer.navitime.biz/sankobus/pc/transfer/TransferSearch?orvName=%E7%86%8A%E6%9C%AC%E9%A7%85%E5%89%8D&start=00270897&via1Name=&via1=&via2Name=&via2=&via3Name=&via3=&dnvName=%E9%98%BF%E8%98%87%E3%81%8F%E3%81%BE%E3%82%82%E3%81%A8%E7%A9%BA%E6%B8%AF&goal=00270898&freeword-search=&freeword-search=&freeword-search=&freeword-search=&freeword-search=&month_=2023%2F7&month=2023%2F7&day_=25&day=25&hour_=6&hour=6&minute=7&basis=1&sort=1&wspeed=standard&method=0&useRouteMethodDefault=2
+
+Aso Kumamoto Airport: 8:10 AM  >> Haneda: 9:50 AM
+
+
+
+
+
+
+# CHECKLIST
+
+Haneda <Airplane> Oita: DONE (Confirmation Number: HESC7T)
+
+Oita Hotel: DONE (Confirmation number: 2326154564, PIN code: 0237)
+
+Oita vs. Iwaki:
+
+Oita <Train(s)> Kagoshima Chuo: 
+
+Kagoshima Chuo Hotel: DONE (Confirmation number: 2509190841, PIN code: 7903)
+
+Kagoshima Utd vs. Ehime: DONE Main Stand NORTH
+
+Kagoshima Chuo <Train> Kumamoto:
+
+Kumamoto Hotel: DONE (Confirmation number: 2279838405, PIN code: 1801)
+
+Roasso Kumamoto vs. Fagiano Okayama: 
+
+Kumamoto <Airplan> Haneda: DONE (Confirmation number: HFD42H)
+
